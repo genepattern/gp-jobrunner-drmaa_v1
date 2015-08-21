@@ -21,6 +21,25 @@
         <version>1.2.17</version>
     </dependency>
 
+    <!-- hard coded GenePattern Server dependency -->
+    <dependency>
+        <groupId>org.genepattern</groupId>
+        <artifactId>gp-full</artifactId>
+        <version>3.9.4</version>
+     </dependency>
+
+    <dependency>
+        <groupId>com.google.guava</groupId>
+        <artifactId>guava</artifactId>
+        <version>15.0</version>
+    </dependency>
+
+    <dependency>
+        <groupId>joda-time</groupId>
+        <artifactId>joda-time</artifactId>
+        <version>2.3</version>
+    </dependency>
+
     <!-- for testing -->
     <dependency>
       <groupId>junit</groupId>
