@@ -1,8 +1,11 @@
 package org.genepattern.drm.impl.drmaa_v1;
 
+import java.io.File;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.log4j.Logger;
 import org.genepattern.drm.DrmJobRecord;
@@ -33,10 +36,15 @@ public class DrmaaV1JobRunner implements JobRunner {
 
     private Session session=null;
     private DrmaaException sessionInitError=null;
-    
-    private static final Map<Integer, DrmJobState> map;
+ 
+    /**
+     * lookup table for mapping the jobProgramStatus flag to the GP DrmJobState class
+     * 
+     * @see Session#
+     */
+    private static final Map<Integer, DrmJobState> jobStateMap;
     static {
-        map=new HashMap<Integer, DrmJobState>();
+        Map<Integer, DrmJobState> map=new HashMap<Integer, DrmJobState>();
         map.put(Session.UNDETERMINED, DrmJobState.UNDETERMINED);
         map.put(Session.QUEUED_ACTIVE, DrmJobState.QUEUED);
         map.put(Session.SYSTEM_ON_HOLD, DrmJobState.QUEUED_HELD);
@@ -46,13 +54,17 @@ public class DrmaaV1JobRunner implements JobRunner {
         map.put(Session.USER_SUSPENDED, DrmJobState.SUSPENDED);
         map.put(Session.USER_SYSTEM_SUSPENDED, DrmJobState.SUSPENDED);
         map.put(Session.DONE, DrmJobState.DONE);
-        map.put(Session.FAILED, DrmJobState.FAILED);
+        map.put(Session.FAILED, DrmJobState.FAILED);        
+        jobStateMap = Collections.unmodifiableMap(map);
     }
 
     public void start() {
         try {
             this.sessionInitError=null;
             this.session=initSession();
+            if (log.isDebugEnabled()) {
+                debugInitTemplate(this.session);
+            }
         }
         catch (final DrmaaException e) {
             log.error("Error initializing session on startup", e);
@@ -78,10 +90,8 @@ public class DrmaaV1JobRunner implements JobRunner {
     @Override
     public String startJob(final DrmJobSubmission jobSubmission) throws CommandExecutorException {
         final Session session=getSession();
-        final String cmd=jobSubmission.getCommandLine().get(0);
-        final List<String> args=jobSubmission.getCommandLine().subList(1, jobSubmission.getCommandLine().size());
         try {
-            final String jobId=submitJob(session, cmd, args);
+            final String jobId=submitJob(session, jobSubmission);
             return jobId;
         }
         catch (DrmaaException e) {
@@ -146,13 +156,97 @@ public class DrmaaV1JobRunner implements JobRunner {
         }
         return session;
     }
+    
+    protected String initFilePath(final DrmJobSubmission jobSubmission, final String name) {
+        return new File(jobSubmission.getWorkingDir(), name).getAbsolutePath();
+    }
+    
+    protected void debugInitTemplate(final Session session) {
+        if (session==null) {
+            log.error("session==null");
+            return;
+        }
+        JobTemplate jt = null;
+        try {
+            log.debug("creating JobTemplate for debugging...");
+            jt = session.createJobTemplate();
+            log.debug("getAttributeNames() ...");
+            final Set<?> attNames=jt.getAttributeNames();
+            if (attNames != null) {
+                for(final Object attName : attNames) {
+                    log.debug("\t"+attName.toString());
+                }
+            }
+        }
+        catch (DrmaaException e) {
+            log.error("caught DrmaaException: "+e.getLocalizedMessage(), e);
+        }
+        catch (Throwable t) {
+            log.error("caught Unexpected Error: "+t.getLocalizedMessage(), t);
+        }
+        finally {
+            if (jt != null) {
+                try {
+                    session.deleteJobTemplate(jt);
+                }
+                catch (Throwable t) {
+                    log.error("Error in session.deleteJobTemplate", t);
+                }
+            }
+        }
+    }
+    
+    /**
+     * Create a new JobTemplate for submitting a job.
+     * @param session
+     * @param jobSubmission
+     * @return
+     * @throws DrmaaException
+     */
+    protected JobTemplate initJobTemplate(final Session session, final DrmJobSubmission jobSubmission) throws DrmaaException {
+        JobTemplate jt = session.createJobTemplate();
+        jt.setJobName("GP_"+jobSubmission.getGpJobNo());
+        jt.setWorkingDirectory(jobSubmission.getWorkingDir().getAbsolutePath());
+        jt.setJoinFiles(false);
+        // TODO: using hard-coded stdout and stderr paths, should check for custom values from the jobSubmission
+        jt.setNativeSpecification("-o stdout.txt -e stderr.txt");
+        
+        final String cmd;
+        final List<String> args;
+        if (jobSubmission.getCommandLine()==null) {
+            // TODO: log error
+            cmd=null;
+            args=Collections.emptyList();
+        }
+        else if (jobSubmission.getCommandLine().size()==0) {
+            // TODO: log error
+            cmd=null;
+            args=Collections.emptyList();
+        }
+        else {
+            cmd=jobSubmission.getCommandLine().get(0);
+            args=jobSubmission.getCommandLine().subList(1, jobSubmission.getCommandLine().size());
+            jt.setRemoteCommand(cmd);
+            jt.setArgs(args);
+        }
 
-    protected String submitJob(final Session session, final String cmd, final List<String> args) throws DrmaaException {
-        JobTemplate jobTemplate = session.createJobTemplate();
-        jobTemplate.setRemoteCommand(cmd);
-        jobTemplate.setArgs(args);
-        String jobId=session.runJob(jobTemplate);
+        return jt;
+    }
+    
+    protected String submitJob(final Session session, final DrmJobSubmission job) throws DrmaaException {
+        JobTemplate jt=initJobTemplate(session, job);        
+        String jobId=session.runJob(jt);
+        session.deleteJobTemplate(jt);
         return jobId;
+    }
+    
+    protected DrmJobState requestDrmJobState(final Session session, final String extJobId) throws DrmaaException {
+        final int drmaaStatusId=session.getJobProgramStatus(extJobId);
+        DrmJobState gpState=jobStateMap.get(drmaaStatusId);
+        if (gpState==null) {
+            gpState=DrmJobState.UNDETERMINED;
+        }
+        return gpState;
     }
     
     protected DrmJobStatus requestStatus(final Session session, final String extJobId) throws DrmaaException {
@@ -163,17 +257,18 @@ public class DrmaaV1JobRunner implements JobRunner {
         try {
             final long timeout_seconds=5;
             jobInfo=session.wait(extJobId, timeout_seconds);
-            log.debug("wait completed!, jobId="+extJobId);
+            log.debug("wait completed!, extJobId="+extJobId);
             
             DrmJobStatus.Builder b=new DrmJobStatus.Builder()
                 .extJobId(jobInfo.getJobId());
             
             if (jobInfo.wasAborted()) {
                 log.debug("wasAborted");
+                log.debug("jobInfo="+jobInfo);
                 b.jobState(DrmJobState.ABORTED);
             }
             else if (jobInfo.hasExited()) {
-                log.debug("hasExited");
+                log.debug("hasExited, exitStatus="+jobInfo.getExitStatus());
                 b.exitCode(jobInfo.getExitStatus());
                 if (jobInfo.getExitStatus()==0) {
                     b.jobState(DrmJobState.DONE);
@@ -183,14 +278,15 @@ public class DrmaaV1JobRunner implements JobRunner {
                 }
             }
             else if (jobInfo.hasSignaled()) {
-                log.debug("hasSignaled");
+                final String msg="hasSignaled, terminatingSignal="+jobInfo.getTerminatingSignal();
+                log.debug(msg);
                 b.jobState(DrmJobState.FAILED);
-                b.jobStatusMessage("drmaa: jobInfo.hasSignaled()==true");
+                b.jobStatusMessage(msg);
             }
             else if (jobInfo.hasCoreDump()) {
                 log.debug("hasCoreDump");
                 b.jobState(DrmJobState.FAILED);
-                b.jobStatusMessage("drmaa: jobInfo.hasCoreDump()==true");
+                b.jobStatusMessage("hasCoreDump");
             }
             else {
                 log.debug("finished with unclear conditions");
@@ -230,14 +326,9 @@ public class DrmaaV1JobRunner implements JobRunner {
         catch (Throwable t) {
             log.error(t);
         }
-        
-        final int drmaaStatusId=session.getJobProgramStatus(extJobId);
-        
-        DrmJobState gpState=map.get(drmaaStatusId);
-        if (gpState==null) {
-            gpState=DrmJobState.UNDETERMINED;
-        }
-        
+
+        // job not finished ...
+        final DrmJobState gpState=requestDrmJobState(session, extJobId);
         return new DrmJobStatus.Builder()
             .extJobId(extJobId)
             .jobState(gpState)
