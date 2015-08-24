@@ -1,6 +1,7 @@
 package org.genepattern.drm.impl.drmaa_v1;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -25,6 +26,8 @@ import org.ggf.drmaa.JobTemplate;
 import org.ggf.drmaa.NoActiveSessionException;
 import org.ggf.drmaa.Session;
 import org.ggf.drmaa.SessionFactory;
+
+import com.google.common.base.Joiner;
 
 /**
  * JobRunner for GridEngine integration with DRMAA v1 compliant library.
@@ -208,6 +211,53 @@ public class DrmaaV1JobRunner implements JobRunner {
     }
     
     /**
+     * @see https://blogs.oracle.com/templedf/entry/using_drm_specific_functionality_via
+     * @return
+     */
+    protected List<String> initNativeSpecification(final DrmJobSubmission jobSubmission) {
+        final List<String> rval=new ArrayList<String>();
+        // always use the '-o' flag
+        final String stdout=initFilepath(jobSubmission.getWorkingDir(), jobSubmission.getStdoutFile(), "stdout.txt");
+        rval.add("-o");
+        rval.add(stdout);
+
+        // always us the '-e' flag
+        final String stderr=initFilepath(jobSubmission.getWorkingDir(), jobSubmission.getStderrFile(), "stderr.txt");
+        rval.add("-e");
+        rval.add(stderr);
+
+        // optionally use the '-i' flag
+        if (jobSubmission.getStdinFile() != null) {
+            final String stdin=initFilepath(jobSubmission.getWorkingDir(), jobSubmission.getStdinFile(), "stdin.txt");
+            rval.add("-i");
+            rval.add(stdin);
+        }
+        
+        return rval;
+    }
+    
+    protected String initFilepath(final File workingDir, final File ioFile, final String defaultValue) {
+        String filepath=defaultValue;
+        if (ioFile != null) {
+            filepath=ioFile.getPath();
+            // special-case: if it's in the working directory
+            if (ioFile.isAbsolute()) {
+                if (ioFile.getParentFile() != null) {
+                    if (ioFile.getParentFile().equals( workingDir )) {
+                        filepath=ioFile.getName();
+                    }
+                }
+            }
+        }
+        return filepath;
+    }
+    
+    protected String formatNativeSpecification(final List<String> args) {
+        Joiner joiner=Joiner.on(' ').useForNull("");
+        return joiner.join(args);
+    }
+
+    /**
      * Create a new JobTemplate for submitting a job.
      * @param session
      * @param jobSubmission with a valid commandLine, Hint: must call validateCmdLine before calling this
@@ -219,8 +269,9 @@ public class DrmaaV1JobRunner implements JobRunner {
         jt.setJobName("GP_"+jobSubmission.getGpJobNo());
         jt.setWorkingDirectory(jobSubmission.getWorkingDir().getAbsolutePath());
         jt.setJoinFiles(false);
-        // TODO: using hard-coded stdout and stderr paths, should check for custom values from the jobSubmission
-        jt.setNativeSpecification("-o stdout.txt -e stderr.txt");
+        List<String> nativeSpecArgs=initNativeSpecification(jobSubmission);
+        final String nativeSpec=formatNativeSpecification(nativeSpecArgs);
+        jt.setNativeSpecification(nativeSpec);
         
         final String cmd;
         final List<String> args;

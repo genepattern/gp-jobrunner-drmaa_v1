@@ -62,7 +62,6 @@ public class TestDrmaaV1JobRunner {
     public void validateCmdLine_nullCmdLine() throws CommandExecutorException {
         job=mock(DrmJobSubmission.class);
         when(job.getCommandLine()).thenReturn(null);
-        jobRunner=new DrmaaV1JobRunner();
         jobRunner.validateCmdLine(job);
     }
     
@@ -71,7 +70,6 @@ public class TestDrmaaV1JobRunner {
         final List<String> cmdLine=Collections.emptyList();
         job=mock(DrmJobSubmission.class);
         when(job.getCommandLine()).thenReturn(cmdLine);
-        jobRunner=new DrmaaV1JobRunner();
         jobRunner.validateCmdLine(job);
     }
 
@@ -80,7 +78,6 @@ public class TestDrmaaV1JobRunner {
         final List<String> cmdLine=Arrays.asList("echo");
         job=mock(DrmJobSubmission.class);
         when(job.getCommandLine()).thenReturn(cmdLine);
-        jobRunner=new DrmaaV1JobRunner();
         jobRunner.validateCmdLine(job);
         assertTrue("validateCmdLine should not throw an exception", true);
     }
@@ -90,9 +87,116 @@ public class TestDrmaaV1JobRunner {
         final List<String> cmdLine=Arrays.asList("echo", "Hello, World!");
         job=mock(DrmJobSubmission.class);
         when(job.getCommandLine()).thenReturn(cmdLine);
-        jobRunner=new DrmaaV1JobRunner();
         jobRunner.validateCmdLine(job);
         assertTrue("validateCmdLine should not throw an exception", true);
+    }
+    
+    protected void assertArgWithFlag(final List<String> args, final String flag, final String expected) {
+        int idx0=args.indexOf(flag);
+        assertTrue("checking for '"+flag+"' in args="+args, idx0>=0);
+        assertEquals("checking for '"+expected+"' in args="+args, expected, args.get(idx0+1));
+    }
+    
+    @Test
+    public void stdout_null() {
+        job=mock(DrmJobSubmission.class);
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        assertArgWithFlag(args, "-o", "stdout.txt");
+    }
+    
+    @Test
+    public void stderr_null() {
+        job=mock(DrmJobSubmission.class);
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        assertArgWithFlag(args, "-e", "stderr.txt");
+    }
+
+    @Test
+    public void stdin_null() {
+        job=mock(DrmJobSubmission.class);
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        assertFalse("not expecting '-i' flag", args.contains("-i"));
+    }
+
+    @Test
+    public void stdout_relativePath() {
+        job=mock(DrmJobSubmission.class);
+        when(job.getStdoutFile()).thenReturn(new File(".custom_stdout.txt"));
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        assertArgWithFlag(args, "-o", ".custom_stdout.txt");
+    }
+    
+    @Test
+    public void stderr_relativePath() {
+        job=mock(DrmJobSubmission.class);
+        when(job.getStderrFile()).thenReturn(new File(".custom_stderr.txt"));
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        assertArgWithFlag(args, "-e", ".custom_stderr.txt");
+    }
+
+    @Test
+    public void stdin_relativePath() {
+        job=mock(DrmJobSubmission.class);
+        when(job.getStdinFile()).thenReturn(new File(".custom_stdin.txt"));
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        assertArgWithFlag(args, "-i", ".custom_stdin.txt");
+    }
+
+    @Test
+    public void stdout_fullPathToJobDir() {
+        job=mock(DrmJobSubmission.class);
+        when(job.getWorkingDir()).thenReturn(jobDir);
+        when(job.getStdoutFile()).thenReturn(new File(jobDir, "stdout.txt"));
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        assertArgWithFlag(args, "-o", "stdout.txt");
+    }
+    
+    @Test
+    public void stderr_fullPathToJobDir() {
+        job=mock(DrmJobSubmission.class);
+        when(job.getWorkingDir()).thenReturn(jobDir);
+        when(job.getStderrFile()).thenReturn(new File(jobDir, "stderr.txt"));
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        assertArgWithFlag(args, "-e", "stderr.txt");
+    }
+
+    @Test
+    public void stdin_fullPathToJobDir() {
+        job=mock(DrmJobSubmission.class);
+        when(job.getWorkingDir()).thenReturn(jobDir);
+        when(job.getStdinFile()).thenReturn(new File(jobDir, "stdin.txt"));
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        assertArgWithFlag(args, "-i", "stdin.txt");
+    }
+
+    @Test
+    public void stdout_fqPath() throws IOException {
+        File stdoutFile=temp.newFile(".custom_stdout.txt");
+        job=mock(DrmJobSubmission.class);
+        when(job.getWorkingDir()).thenReturn(jobDir);
+        when(job.getStdoutFile()).thenReturn(stdoutFile);
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        assertArgWithFlag(args, "-o", stdoutFile.getPath()); 
+    }
+    
+    @Test
+    public void stderr_fqPath() throws IOException {
+        File stderrFile=temp.newFile(".custom_stderr.txt");
+        job=mock(DrmJobSubmission.class);
+        when(job.getWorkingDir()).thenReturn(jobDir);
+        when(job.getStderrFile()).thenReturn(stderrFile);
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        assertArgWithFlag(args, "-e", stderrFile.getPath()); 
+    }
+
+    @Test
+    public void stdin_fqPath() throws IOException {
+        File stdinFile=temp.newFile(".custom_stdin.txt");
+        job=mock(DrmJobSubmission.class);
+        when(job.getWorkingDir()).thenReturn(jobDir);
+        when(job.getStdinFile()).thenReturn(stdinFile);
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        assertArgWithFlag(args, "-i", stdinFile.getPath()); 
     }
 
     @Test
