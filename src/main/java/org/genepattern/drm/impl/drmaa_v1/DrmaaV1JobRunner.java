@@ -38,11 +38,12 @@ public class DrmaaV1JobRunner implements JobRunner {
     private DrmaaException sessionInitError=null;
  
     /**
-     * lookup table for mapping the jobProgramStatus flag to the GP DrmJobState class
+     * lookup table for selecting an entry from the GenePattern DrmJobState enum 
+     * from a DRMAA v1 jobProgramStatus flag
      * 
      * @see Session#
      */
-    private static final Map<Integer, DrmJobState> jobStateMap;
+    public static final Map<Integer, DrmJobState> jobStateMap;
     static {
         Map<Integer, DrmJobState> map=new HashMap<Integer, DrmJobState>();
         map.put(Session.UNDETERMINED, DrmJobState.UNDETERMINED);
@@ -89,6 +90,7 @@ public class DrmaaV1JobRunner implements JobRunner {
 
     @Override
     public String startJob(final DrmJobSubmission jobSubmission) throws CommandExecutorException {
+        validateCmdLine(jobSubmission);
         final Session session=getSession();
         try {
             final String jobId=submitJob(session, jobSubmission);
@@ -196,10 +198,19 @@ public class DrmaaV1JobRunner implements JobRunner {
         }
     }
     
+    protected void validateCmdLine(final DrmJobSubmission jobSubmission) throws CommandExecutorException {
+        if (jobSubmission.getCommandLine()==null) {
+            throw new CommandExecutorException("jobSubmission.commandLine==null");
+        }
+        else if (jobSubmission.getCommandLine().size()==0) {
+            throw new CommandExecutorException("jobSubmission.commandLine.size==0");
+        }
+    }
+    
     /**
      * Create a new JobTemplate for submitting a job.
      * @param session
-     * @param jobSubmission
+     * @param jobSubmission with a valid commandLine, Hint: must call validateCmdLine before calling this
      * @return
      * @throws DrmaaException
      */
@@ -213,22 +224,10 @@ public class DrmaaV1JobRunner implements JobRunner {
         
         final String cmd;
         final List<String> args;
-        if (jobSubmission.getCommandLine()==null) {
-            // TODO: log error
-            cmd=null;
-            args=Collections.emptyList();
-        }
-        else if (jobSubmission.getCommandLine().size()==0) {
-            // TODO: log error
-            cmd=null;
-            args=Collections.emptyList();
-        }
-        else {
-            cmd=jobSubmission.getCommandLine().get(0);
-            args=jobSubmission.getCommandLine().subList(1, jobSubmission.getCommandLine().size());
-            jt.setRemoteCommand(cmd);
-            jt.setArgs(args);
-        }
+        cmd=jobSubmission.getCommandLine().get(0);
+        args=jobSubmission.getCommandLine().subList(1, jobSubmission.getCommandLine().size());
+        jt.setRemoteCommand(cmd);
+        jt.setArgs(args);
 
         return jt;
     }

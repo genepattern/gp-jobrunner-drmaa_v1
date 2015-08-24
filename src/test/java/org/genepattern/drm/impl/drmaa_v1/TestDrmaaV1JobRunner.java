@@ -1,21 +1,24 @@
 package org.genepattern.drm.impl.drmaa_v1;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 import org.genepattern.drm.DrmJobSubmission;
 import org.genepattern.server.config.GpConfig;
 import org.genepattern.server.config.GpContext;
+import org.genepattern.server.executor.CommandExecutorException;
 import org.ggf.drmaa.DrmaaException;
 import org.ggf.drmaa.JobTemplate;
 import org.ggf.drmaa.Session;
 import org.ggf.drmaa.SimpleJobTemplate;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -47,6 +50,7 @@ public class TestDrmaaV1JobRunner {
         job=new DrmJobSubmission.Builder(jobDir)
             .gpConfig(gpConfig)
             .jobContext(jobContext)
+            .commandLine(Arrays.asList("echo", "Hello, World!"))
         .build();
 
         jobRunner=new DrmaaV1JobRunner();
@@ -54,6 +58,43 @@ public class TestDrmaaV1JobRunner {
         when(session.createJobTemplate()).thenReturn(new SimpleJobTemplate());
     }
     
+    @Test(expected=CommandExecutorException.class)
+    public void validateCmdLine_nullCmdLine() throws CommandExecutorException {
+        job=mock(DrmJobSubmission.class);
+        when(job.getCommandLine()).thenReturn(null);
+        jobRunner=new DrmaaV1JobRunner();
+        jobRunner.validateCmdLine(job);
+    }
+    
+    @Test(expected=CommandExecutorException.class)
+    public void validateCmdLine_emptyCmdLine() throws CommandExecutorException {
+        final List<String> cmdLine=Collections.emptyList();
+        job=mock(DrmJobSubmission.class);
+        when(job.getCommandLine()).thenReturn(cmdLine);
+        jobRunner=new DrmaaV1JobRunner();
+        jobRunner.validateCmdLine(job);
+    }
+
+    @Test
+    public void validateCmdLine_oneArg() throws CommandExecutorException {
+        final List<String> cmdLine=Arrays.asList("echo");
+        job=mock(DrmJobSubmission.class);
+        when(job.getCommandLine()).thenReturn(cmdLine);
+        jobRunner=new DrmaaV1JobRunner();
+        jobRunner.validateCmdLine(job);
+        assertTrue("validateCmdLine should not throw an exception", true);
+    }
+
+    @Test
+    public void validateCmdLine_twoArgs() throws CommandExecutorException {
+        final List<String> cmdLine=Arrays.asList("echo", "Hello, World!");
+        job=mock(DrmJobSubmission.class);
+        when(job.getCommandLine()).thenReturn(cmdLine);
+        jobRunner=new DrmaaV1JobRunner();
+        jobRunner.validateCmdLine(job);
+        assertTrue("validateCmdLine should not throw an exception", true);
+    }
+
     @Test
     public void initJobTemplate_setWorkingDir() throws DrmaaException {
         JobTemplate jt=jobRunner.initJobTemplate(session, job);
@@ -64,10 +105,6 @@ public class TestDrmaaV1JobRunner {
     public void initJobTemplate_getJobName() throws DrmaaException {
         JobTemplate jt=jobRunner.initJobTemplate(session, job);
         assertEquals("jt.jobName", "GP_"+jobNo, jt.getJobName()); 
-    }
-    
-    public void initJobTemplate_ioRedirect() throws DrmaaException {
-        JobTemplate jt=jobRunner.initJobTemplate(session, job);
     }
 
 }
