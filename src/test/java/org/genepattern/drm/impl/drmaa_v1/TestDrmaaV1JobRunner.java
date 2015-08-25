@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.List;
 
 import org.genepattern.drm.DrmJobSubmission;
+import org.genepattern.drm.JobRunner;
 import org.genepattern.drm.Memory;
 import org.genepattern.server.config.GpConfig;
 import org.genepattern.server.config.GpContext;
@@ -116,7 +117,7 @@ public class TestDrmaaV1JobRunner {
     public void stdin_null() {
         job=mock(DrmJobSubmission.class);
         final List<String> args=jobRunner.initNativeSpecification(job);
-        assertFalse("not expecting '-i' flag", args.contains("-i"));
+        assertFalse("not expecting '-i' flag, args="+args, args.contains("-i"));
     }
 
     @Test
@@ -244,7 +245,7 @@ public class TestDrmaaV1JobRunner {
         job=mock(DrmJobSubmission.class);
         when(job.getQueue()).thenReturn("");
         final List<String> args=jobRunner.initNativeSpecification(job);
-        assertFalse("not expecting '-q' flag", args.contains("-q"));
+        assertFalse("not expecting '-q' flag, args="+args, args.contains("-q"));
     }
 
     @Test
@@ -252,7 +253,32 @@ public class TestDrmaaV1JobRunner {
         job=mock(DrmJobSubmission.class);
         when(job.getQueue()).thenReturn(null);
         final List<String> args=jobRunner.initNativeSpecification(job);
-        assertFalse("not expecting '-q' flag", args.contains("-q"));
+        assertFalse("not expecting '-q' flag, arg="+args, args.contains("-q"));
+    }
+    
+    @Test
+    public void jobProject() {
+        job=mock(DrmJobSubmission.class);
+        when(job.getProperty(JobRunner.PROP_PROJECT)).thenReturn("my_project");
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        // -P <job.project>
+        assertArgWithFlag(args, "-P", "my_project"); 
+    }
+
+    @Test
+    public void jobProject_emptyString() {
+        job=mock(DrmJobSubmission.class);
+        when(job.getProperty(JobRunner.PROP_PROJECT)).thenReturn("");
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        assertFalse("not expecting '-P' flag, args="+args, args.contains("-P"));
+    }
+
+    @Test
+    public void jobProject_null() {
+        job=mock(DrmJobSubmission.class);
+        when(job.getProperty(JobRunner.PROP_PROJECT)).thenReturn(null);
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        assertFalse("not expecting '-P' flag, args="+args, args.contains("-P"));
     }
 
     @Test

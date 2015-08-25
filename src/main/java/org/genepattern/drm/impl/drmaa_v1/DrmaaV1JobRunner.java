@@ -247,6 +247,12 @@ public class DrmaaV1JobRunner implements JobRunner {
             rval.add(jobSubmission.getQueue());
         }
         
+        // optionally set the project flag
+        final String project=jobSubmission.getProperty(JobRunner.PROP_PROJECT);
+        if (!Strings.isNullOrEmpty(project)) {
+            rval.add("-P");
+            rval.add(project);
+        }
         return rval;
     }
     
