@@ -28,6 +28,7 @@ import org.ggf.drmaa.Session;
 import org.ggf.drmaa.SessionFactory;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Strings;
 
 /**
  * JobRunner for GridEngine integration with DRMAA v1 compliant library.
@@ -238,6 +239,12 @@ public class DrmaaV1JobRunner implements JobRunner {
             //-l m_mem_free=Xg
             rval.add("-l");
             rval.add("m_mem_free="+((long)Math.ceil(jobSubmission.getMemory().numGb()))+"g");
+        }
+        
+        // optionally set the queue flag
+        if (!Strings.isNullOrEmpty(jobSubmission.getQueue())) {
+            rval.add("-q");
+            rval.add(jobSubmission.getQueue());
         }
         
         return rval;

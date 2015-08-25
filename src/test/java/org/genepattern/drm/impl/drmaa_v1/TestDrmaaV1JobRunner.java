@@ -229,6 +229,31 @@ public class TestDrmaaV1JobRunner {
         //  -l m_mem_free=Xg
         assertArgWithFlag(args, "-l", "m_mem_free=5g");
     }
+    
+    @Test
+    public void jobQueue() {
+        job=mock(DrmJobSubmission.class);
+        when(job.getQueue()).thenReturn("short");
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        // -q <queue>
+        assertArgWithFlag(args, "-q", "short"); 
+    }
+
+    @Test
+    public void jobQueue_emptyString() {
+        job=mock(DrmJobSubmission.class);
+        when(job.getQueue()).thenReturn("");
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        assertFalse("not expecting '-q' flag", args.contains("-q"));
+    }
+
+    @Test
+    public void jobQueue_null() {
+        job=mock(DrmJobSubmission.class);
+        when(job.getQueue()).thenReturn(null);
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        assertFalse("not expecting '-q' flag", args.contains("-q"));
+    }
 
     @Test
     public void initJobTemplate_setWorkingDir() throws DrmaaException {
