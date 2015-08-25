@@ -233,6 +233,13 @@ public class DrmaaV1JobRunner implements JobRunner {
             rval.add(stdin);
         }
         
+        // optionally set the memory flag
+        if (jobSubmission.getMemory() != null) {
+            //-l m_mem_free=Xg
+            rval.add("-l");
+            rval.add("m_mem_free="+((long)Math.ceil(jobSubmission.getMemory().numGb()))+"g");
+        }
+        
         return rval;
     }
     

@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.List;
 
 import org.genepattern.drm.DrmJobSubmission;
+import org.genepattern.drm.Memory;
 import org.genepattern.server.config.GpConfig;
 import org.genepattern.server.config.GpContext;
 import org.genepattern.server.executor.CommandExecutorException;
@@ -197,6 +198,36 @@ public class TestDrmaaV1JobRunner {
         when(job.getStdinFile()).thenReturn(stdinFile);
         final List<String> args=jobRunner.initNativeSpecification(job);
         assertArgWithFlag(args, "-i", stdinFile.getPath()); 
+    }
+    
+    @Test
+    public void jobMemory() {
+        job=mock(DrmJobSubmission.class);
+        when(job.getMemory()).thenReturn(Memory.fromString("24 Gb"));
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        
+        //  -l m_mem_free=Xg
+        assertArgWithFlag(args, "-l", "m_mem_free=24g");
+    }
+    
+    @Test
+    public void jobMemory_lessThanOne() {
+        job=mock(DrmJobSubmission.class);
+        when(job.getMemory()).thenReturn(Memory.fromString("512m"));
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        
+        //  -l m_mem_free=Xg
+        assertArgWithFlag(args, "-l", "m_mem_free=1g");
+    }
+
+    @Test
+    public void jobMemory_fractionalGb() {
+        job=mock(DrmJobSubmission.class);
+        when(job.getMemory()).thenReturn(Memory.fromString("4.5 Gb"));
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        
+        //  -l m_mem_free=Xg
+        assertArgWithFlag(args, "-l", "m_mem_free=5g");
     }
 
     @Test
