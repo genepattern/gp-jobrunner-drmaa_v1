@@ -21,6 +21,7 @@ import org.ggf.drmaa.JobTemplate;
 import org.ggf.drmaa.Session;
 import org.ggf.drmaa.SimpleJobTemplate;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -93,10 +94,14 @@ public class TestDrmaaV1JobRunner {
         assertTrue("validateCmdLine should not throw an exception", true);
     }
     
-    protected void assertArgWithFlag(final List<String> args, final String flag, final String expected) {
+    protected void assertArgWithFlag(final List<String> args, final String flag, final String... expectedArgs) {
         int idx0=args.indexOf(flag);
-        assertTrue("checking for '"+flag+"' in args="+args, idx0>=0);
-        assertEquals("checking for '"+expected+"' in args="+args, expected, args.get(idx0+1));
+        assertTrue("missing expected flag='"+flag+"' in args="+args, idx0>=0);
+        int j=idx0;
+        for(final String expected : expectedArgs) {
+            ++j;
+            assertEquals("checking for '"+expected+"' in args="+args, expected, args.get(j));
+        }
     }
     
     @Test
@@ -282,6 +287,160 @@ public class TestDrmaaV1JobRunner {
     }
 
     @Test
+    public void extraArgs_bindingExample() {
+        job=mock(DrmJobSubmission.class);
+        //when(job.getCpuCount()).thenReturn(8);
+        //when(job.getExtraArgs()).thenReturn(Arrays.asList("-binding", "pe", "linear:<job.cpuCount>"));
+        when(job.getExtraArgs()).thenReturn(Arrays.asList("-binding", "pe", "linear:8"));
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        // -pe smp 8
+        assertArgWithFlag(args, "-binding", "pe", "linear:8");
+    }
+    
+    // feature request: enable command substitutions on right-hand values in config file
+    @Ignore @Test
+    public void extraArgs_bindingExample_withSubstitution() {
+        job=mock(DrmJobSubmission.class);
+        when(job.getCpuCount()).thenReturn(8);
+        when(job.getExtraArgs()).thenReturn(Arrays.asList("-binding", "pe", "linear:<job.cpuCount>"));
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        // -pe smp 8
+        assertArgWithFlag(args, "-binding", "pe", "linear:8");
+    }
+
+    /** Parallel Environment flag */
+    @Test
+    public void jobPeFlag_fromCpuCount() {
+        // qsub -pe openmpi 8
+        job=mock(DrmJobSubmission.class);
+        when(job.getCpuCount()).thenReturn(8);
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        // -pe smp 8
+        assertArgWithFlag(args, "-pe", "smp", "8");
+    }
+
+    @Test
+    public void jobPeFlag_fromNodeCount() {
+        // qsub -pe openmpi 8
+        job=mock(DrmJobSubmission.class);
+        when(job.getNodeCount()).thenReturn(8);
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        // -pe smp 8
+        assertArgWithFlag(args, "-pe", "smp", "8");
+    }
+
+    @Test
+    public void jobPeFlag_peType_custom() {
+        // mpi, openmpi, smp
+        job=mock(DrmJobSubmission.class);
+        when(job.getProperty(DrmaaV1JobRunner.PROP_PE_TYPE)).thenReturn("mpi");
+        when(job.getCpuCount()).thenReturn(8);
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        // -pe smp 8
+        assertArgWithFlag(args, "-pe", "mpi", "8");
+    }
+
+    @Test
+    public void jobPeFlag_fromCpuCount_invalid() {
+        // qsub -pe openmpi 8
+        job=mock(DrmJobSubmission.class);
+        when(job.getCpuCount()).thenReturn(-1);
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        assertFalse("not expecting '-pe' flag, arg="+args, args.contains("-pe"));
+    }
+
+    @Test
+    public void jobPeFlag_notSet() {
+        job=mock(DrmJobSubmission.class);
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        assertFalse("not expecting '-pe' flag, arg="+args, args.contains("-pe"));
+    }
+
+    @Test
+    public void numCores_default() {
+        final GpConfig gpConfig=new GpConfig.Builder().build(); 
+        final DrmJobSubmission job=new DrmJobSubmission.Builder(jobDir)
+            .jobContext(jobContext)
+            .gpConfig(gpConfig)
+        .build();
+
+        assertEquals("numCores, default", null, jobRunner.getNumCores(job));
+    }
+    
+    @Test
+    public void numCores_fromCpuCount() {
+        final GpConfig gpConfig=new GpConfig.Builder()
+            .addProperty(JobRunner.PROP_CPU_COUNT, "8")
+        .build();
+        
+        final DrmJobSubmission job=new DrmJobSubmission.Builder(jobDir)
+            .jobContext(jobContext)
+            .gpConfig(gpConfig)
+        .build();
+
+        assertEquals("numCores, default", new Integer(8), jobRunner.getNumCores(job));
+    }
+
+    @Test
+    public void numCores_fromNodeCount() {
+        final GpConfig gpConfig=new GpConfig.Builder()
+            .addProperty(JobRunner.PROP_NODE_COUNT, "4")
+        .build();
+        
+        final DrmJobSubmission job=new DrmJobSubmission.Builder(jobDir)
+            .jobContext(jobContext)
+            .gpConfig(gpConfig)
+        .build();
+
+        assertEquals("numCores, default", new Integer(4), jobRunner.getNumCores(job));
+    }
+    
+    @Test 
+    public void numCores_both_same() {
+        final GpConfig gpConfig=new GpConfig.Builder()
+            .addProperty(JobRunner.PROP_CPU_COUNT, "8")
+            .addProperty(JobRunner.PROP_NODE_COUNT, "8")
+        .build();
+        
+        final DrmJobSubmission job=new DrmJobSubmission.Builder(jobDir)
+            .jobContext(jobContext)
+            .gpConfig(gpConfig)
+        .build();
+
+        assertEquals("numCores, default", new Integer(8), jobRunner.getNumCores(job));
+    }
+
+    @Test 
+    public void numCores_both_diff_useNodeCount() {
+        final GpConfig gpConfig=new GpConfig.Builder()
+            .addProperty(JobRunner.PROP_CPU_COUNT, "4")
+            .addProperty(JobRunner.PROP_NODE_COUNT, "8")
+        .build();
+        
+        final DrmJobSubmission job=new DrmJobSubmission.Builder(jobDir)
+            .jobContext(jobContext)
+            .gpConfig(gpConfig)
+        .build();
+
+        assertEquals("numCores, default", new Integer(8), jobRunner.getNumCores(job));
+    }
+    
+    @Test 
+    public void numCores_both_diff_useCpuCount() {
+        final GpConfig gpConfig=new GpConfig.Builder()
+            .addProperty(JobRunner.PROP_CPU_COUNT, "8")
+            .addProperty(JobRunner.PROP_NODE_COUNT, "4")
+        .build();
+        
+        final DrmJobSubmission job=new DrmJobSubmission.Builder(jobDir)
+            .jobContext(jobContext)
+            .gpConfig(gpConfig)
+        .build();
+
+        assertEquals("numCores, default", new Integer(8), jobRunner.getNumCores(job));
+    }
+
+    @Test
     public void initJobTemplate_setWorkingDir() throws DrmaaException {
         JobTemplate jt=jobRunner.initJobTemplate(session, job);
         assertEquals("jt.workingDirectory", jobDir.getAbsolutePath(), jt.getWorkingDirectory());
@@ -292,5 +451,6 @@ public class TestDrmaaV1JobRunner {
         JobTemplate jt=jobRunner.initJobTemplate(session, job);
         assertEquals("jt.jobName", "GP_"+jobNo, jt.getJobName()); 
     }
+    
 
 }

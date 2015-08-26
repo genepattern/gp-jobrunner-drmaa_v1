@@ -2,10 +2,12 @@ package org.genepattern.drm.impl.drmaa_v1;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 
 import org.apache.log4j.Logger;
@@ -31,7 +33,46 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 
 /**
- * JobRunner for GridEngine integration with DRMAA v1 compliant library.
+ * JobRunner for GridEngine integration with DRMAA v1 library.
+ * 
+ * <h1>Configuration guide</h1>
+ * 
+ * Example config_yaml entry:
+<pre>
+executors:
+    #
+    # JobRunner API integration for Univa Grid Engine with DRMAA v1
+    #
+    UGER:
+        classname: org.genepattern.server.executor.drm.JobExecutor
+        configuration.properties:
+            jobRunnerClassname: org.genepattern.drm.impl.drmaa_v1.DrmaaV1JobRunner
+            jobRunnerName: UGER
+        default.properties:
+            job.queue: short
+
+            ### 
+            # UGER specific flags
+            ###
+            
+            # [optional] set the Parallel Execution environment for a multi-core job
+            # 
+            # This flag is used when the job.cpuCount or job.nodeCount > 1.
+            #     -pe <job.gp.pe_type> <job.cpuCount>
+            # Use the 'qconf -spl' command to list available parallel environments. Broad hosted UGER options are:
+            #     mpi | openmpi | smp
+            #
+            # To learn more about a specific PE, type something like:
+            #     qconf -sp openmpi
+            #
+            job.ge.pe_type: smp
+
+ * </pre>
+ * 
+ * <h1>Debugging Guide</h1>
+ * Example GridEngine command lines.
+ * 
+ * 
  * @author pcarr
  *
  */
@@ -40,6 +81,11 @@ public class DrmaaV1JobRunner implements JobRunner {
 
     private Session session=null;
     private DrmaaException sessionInitError=null;
+    
+    /**
+     * Set the 'job.ge.pe_type' to specify the parallel environment for a multi-core job
+     */
+    public static final String PROP_PE_TYPE="job.ge.pe_type";
  
     /**
      * lookup table for selecting an entry from the GenePattern DrmJobState enum 
@@ -253,7 +299,64 @@ public class DrmaaV1JobRunner implements JobRunner {
             rval.add("-P");
             rval.add(project);
         }
+        
+        // optionally set the '-pe' flag, for parallel jobs
+        rval.addAll(getPeFlags(jobSubmission));
+        
+        // optionally add any extra args
+        final List<String> extraArgs=jobSubmission.getExtraArgs();
+        if (extraArgs != null) { 
+            rval.addAll(extraArgs);
+        }
         return rval;
+    }
+
+    /**
+     * Helper method to deal with two possible flags:
+     *     job.cpuCount and job.nodeCount
+     *     
+     * @param jobSubmission
+     * @return
+     */
+    protected Integer getNumCores(final DrmJobSubmission jobSubmission) {
+        Integer nodeCount=jobSubmission.getNodeCount();
+        Integer cpuCount=jobSubmission.getCpuCount();
+        if (cpuCount==nodeCount) return cpuCount;
+        if (nodeCount==null && cpuCount !=null) return cpuCount;
+        if (cpuCount==null && nodeCount !=null) return nodeCount;
+        
+        // special-case: both set, but they differ        
+        return Math.max(nodeCount, cpuCount); 
+    }
+    
+    protected String getPeType(final DrmJobSubmission jobSubmission) {
+        String peType=jobSubmission.getProperty(PROP_PE_TYPE);
+        if (peType==null) {
+            peType="smp"; // default value
+        }
+        return peType;
+    }
+    
+    /**
+     * Get the [optional] parallel environment flags as nativeSpec args based on the
+     * <job.cpuCount> or <job.nodeCount> and the [optional] <job.ge.pe_type>.
+     * 
+     * Example qsub command-line:
+     *     qsub -pe openmpi 4 -b y my_wonderful_multiprocessor_app
+     * 
+     */
+    protected List<String> getPeFlags(final DrmJobSubmission jobSubmission) {
+        final Integer numCores=getNumCores(jobSubmission);
+        if (numCores==null) {
+            return Collections.emptyList();
+        }
+        else if (numCores <= 0) {
+            log.warn("numCores="+numCores+", ignore");
+            return Collections.emptyList();
+        }
+        
+        final String peType=getPeType(jobSubmission);
+        return Arrays.asList("-pe", peType, ""+numCores);
     }
     
     protected String initFilepath(final File workingDir, final File ioFile, final String defaultValue) {
@@ -328,6 +431,16 @@ public class DrmaaV1JobRunner implements JobRunner {
             final long timeout_seconds=5;
             jobInfo=session.wait(extJobId, timeout_seconds);
             log.debug("wait completed!, extJobId="+extJobId);
+            
+            if (log.isDebugEnabled()) {
+                Map<?,?> usage=jobInfo.getResourceUsage();
+                if (usage != null) {
+                    log.debug("jobInfo.resourceUsage ...");
+                    for(final Entry<?,?> e : usage.entrySet()) {
+                        log.debug(e.getKey()+"="+e.getValue());
+                    }
+                }
+            }
             
             DrmJobStatus.Builder b=new DrmJobStatus.Builder()
                 .extJobId(jobInfo.getJobId());
