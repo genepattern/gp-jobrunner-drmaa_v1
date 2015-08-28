@@ -172,6 +172,7 @@ public class DrmaaV1JobRunner implements JobRunner {
         }
         // TODO: deal with these exceptions, UNDETERMINED causes the job to be flagged as cancelled in GP
         catch (CommandExecutorException e) {
+            log.error("Error getting status for gpJobNo="+drmJobRecord.getGpJobNo(), e);
             return new DrmJobStatus.Builder()
                 .extJobId(drmJobRecord.getExtJobId())
                 .jobState(DrmJobState.UNDETERMINED)
@@ -179,12 +180,23 @@ public class DrmaaV1JobRunner implements JobRunner {
             .build();
         }
         catch (DrmaaException e) {
+            log.error("Error getting status for gpJobNo="+drmJobRecord.getGpJobNo(), e);
             return new DrmJobStatus.Builder()
                 .extJobId(drmJobRecord.getExtJobId())
                 .jobState(DrmJobState.UNDETERMINED)
                 .jobStatusMessage("job queue error: "+e.getLocalizedMessage())
             .build();
         }
+        catch (Throwable t) {
+            log.error("Error getting status for gpJobNo="+drmJobRecord.getGpJobNo(), t);
+            return new DrmJobStatus.Builder()
+                .extJobId(drmJobRecord.getExtJobId())
+                .jobState(DrmJobState.UNDETERMINED)
+                .jobStatusMessage("job queue error: "+t.getLocalizedMessage())
+            .build();
+        }
+        
+
     }
 
     @Override
@@ -421,6 +433,9 @@ public class DrmaaV1JobRunner implements JobRunner {
     }
     
     protected DrmJobState requestDrmJobState(final Session session, final String extJobId) throws DrmaaException {
+        if (log.isDebugEnabled()) {
+            log.debug("getJobProgramStatus("+extJobId+")");
+        }
         final int drmaaStatusId=session.getJobProgramStatus(extJobId);
         DrmJobState gpState=jobStateMap.get(drmaaStatusId);
         if (gpState==null) {
@@ -714,10 +729,8 @@ recording status for gpJobNo=79917, updatedJobStatus=drmJobId=169437, queueId=nu
             log.error(t);
         }
 
-        // job not finished ...
         if (log.isDebugEnabled()) {
-            // TODO: add more details
-            log.debug("job not finished, ");
+            log.debug("job not finished, extJobId="+extJobId);
         }
         final DrmJobState gpState=requestDrmJobState(session, extJobId);
         return new DrmJobStatus.Builder()
