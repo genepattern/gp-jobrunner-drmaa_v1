@@ -8,8 +8,10 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 
+import org.genepattern.drm.CpuTime;
 import org.genepattern.drm.DrmJobSubmission;
 import org.genepattern.drm.JobRunner;
 import org.genepattern.drm.Memory;
@@ -320,6 +322,14 @@ public class TestDrmaaV1JobRunner {
     }
 
     @Test
+    public void jobPeFlag_one_cpu() {
+        job=mock(DrmJobSubmission.class);
+        when(job.getCpuCount()).thenReturn(1);
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        assertFalse("not expecting '-pe' flag, arg="+args, args.contains("-pe"));
+    }
+
+    @Test
     public void jobPeFlag_fromNodeCount() {
         // qsub -pe openmpi 8
         job=mock(DrmJobSubmission.class);
@@ -438,6 +448,105 @@ public class TestDrmaaV1JobRunner {
         .build();
 
         assertEquals("numCores, default", new Integer(8), jobRunner.getNumCores(job));
+    }
+    
+    @Test
+    public void cpuTime() {
+        // cpu=2720.2300
+        assertEquals("asCpuTime(2720.2300)", 
+                new CpuTime(2720230l).asMillis(), 
+                DrmaaV1JobRunner.asCpuTime("2720.2300").asMillis());
+    }
+
+    @Test
+    public void cpuTime_null() {
+        assertEquals("asCpuTime(null)", null, DrmaaV1JobRunner.asCpuTime(null));
+    }
+
+    @Test
+    public void cpuTime_empty() {
+        assertEquals("asCpuTime(\"\")", null, DrmaaV1JobRunner.asCpuTime(""));
+        assertEquals("asCpuTime(25 sec)", null, DrmaaV1JobRunner.asCpuTime("25 sec"));
+    }
+
+    @Test
+    public void cpuTime_formatError() {
+        assertEquals("asCpuTime(25 sec)", null, DrmaaV1JobRunner.asCpuTime("25 sec"));
+    }
+    
+    @Test
+    public void parseDate_withDecimal() {
+        final String start_time="1440658419871.0000";
+        assertEquals("start_time", new Date(1440658419871l), DrmaaV1JobRunner.parseDate(start_time));
+    }
+
+    @Test
+    public void parseDate() {
+        final String start_time="1440658419871";
+        assertEquals("start_time", new Date(1440658419871l), DrmaaV1JobRunner.parseDate(start_time));
+    }
+    
+    @Test
+    public void parseDate_null() {
+        final String start_time=null;
+        assertEquals("start_time", null, DrmaaV1JobRunner.parseDate(start_time));
+    }
+    
+    @Test
+    public void parseDate_formatError() {
+        final String start_time="1440658419871.0000 millis";
+        assertEquals("start_time", null, DrmaaV1JobRunner.parseDate(start_time));
+    }
+
+    @Test
+    public void parseDate_empty() {
+        final String start_time="";
+        assertEquals("start_time", null, DrmaaV1JobRunner.parseDate(start_time));
+    }
+    
+    @Test
+    public void parseMemory() {
+        // # The maximum vmem size in bytes. 
+        final String maxvmem="1473015808.0000";
+        assertEquals("parseMemory("+maxvmem+")", Memory.fromSizeInBytes(1473015808), DrmaaV1JobRunner.parseMemory(maxvmem));
+    }
+
+    @Test
+    public void parseMemory_null() {
+        final String maxvmem=null;
+        assertEquals("parseMemory("+maxvmem+")", null, DrmaaV1JobRunner.parseMemory(maxvmem));
+    }
+
+    @Test
+    public void parseMemory_empty() {
+        final String maxvmem="";
+        assertEquals("parseMemory("+maxvmem+")", null, DrmaaV1JobRunner.parseMemory(maxvmem));
+    }
+
+    @Test
+    public void parseMemory_formatError() {
+        final String maxvmem="1473015808.0000 bytes";
+        assertEquals("parseMemory("+maxvmem+")", null, DrmaaV1JobRunner.parseMemory(maxvmem));
+    }
+    
+    @Test
+    public void parseMemory_withUnits_M() {
+        final String maxvmem="1015.188M";
+        final Memory mem=DrmaaV1JobRunner.parseMemory(maxvmem);
+        assertEquals("parseMemory("+maxvmem+")", Memory.fromString("1015.188M"), mem);
+        boolean inRange = Memory.fromString("1015M").getNumBytes() < mem.getNumBytes() &&
+                mem.getNumBytes() < Memory.fromString("1016M").getNumBytes();
+        assertEquals("inRange", true, inRange);
+    }
+
+    @Test
+    public void parseMemory_withUnits_G() {
+        final String maxvmem="1.050G";
+        final Memory mem=DrmaaV1JobRunner.parseMemory(maxvmem);
+        assertEquals("parseMemory("+maxvmem+")", Memory.fromString("1.050G"), mem);
+        boolean inRange = Memory.fromString("1.045G").getNumBytes() < mem.getNumBytes() &&
+                mem.getNumBytes() < Memory.fromString("1.055G").getNumBytes();
+        assertEquals("inRange", true, inRange);
     }
 
     @Test

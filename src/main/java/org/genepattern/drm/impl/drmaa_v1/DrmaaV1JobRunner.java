@@ -4,18 +4,23 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
 import org.apache.log4j.Logger;
+import org.genepattern.drm.CpuTime;
 import org.genepattern.drm.DrmJobRecord;
 import org.genepattern.drm.DrmJobState;
 import org.genepattern.drm.DrmJobStatus;
 import org.genepattern.drm.DrmJobSubmission;
 import org.genepattern.drm.JobRunner;
+import org.genepattern.drm.Memory;
 import org.genepattern.server.executor.CommandExecutorException;
 import org.ggf.drmaa.AuthorizationException;
 import org.ggf.drmaa.DrmCommunicationException;
@@ -31,6 +36,7 @@ import org.ggf.drmaa.SessionFactory;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
+import com.google.common.primitives.Doubles;
 
 /**
  * JobRunner for GridEngine integration with DRMAA v1 library.
@@ -164,6 +170,7 @@ public class DrmaaV1JobRunner implements JobRunner {
             final Session session = getSession();
             return requestStatus(session, drmJobRecord.getExtJobId());
         }
+        // TODO: deal with these exceptions, UNDETERMINED causes the job to be flagged as cancelled in GP
         catch (CommandExecutorException e) {
             return new DrmJobStatus.Builder()
                 .extJobId(drmJobRecord.getExtJobId())
@@ -350,7 +357,7 @@ public class DrmaaV1JobRunner implements JobRunner {
         if (numCores==null) {
             return Collections.emptyList();
         }
-        else if (numCores <= 0) {
+        else if (numCores <= 1) {
             log.warn("numCores="+numCores+", ignore");
             return Collections.emptyList();
         }
@@ -422,6 +429,210 @@ public class DrmaaV1JobRunner implements JobRunner {
         return gpState;
     }
     
+    /**
+     * Parse the "cpu" from the usage map, e.g.
+     *     # The cpu time usage in seconds.
+     *     cpu=2720.2300
+     * @param cpuStr
+     * @return
+     */
+    protected static CpuTime asCpuTime(final String cpuStr) {
+        if (Strings.isNullOrEmpty(cpuStr)) {
+            log.debug("cpuStr isNullOrEmpty");
+            return null;
+        }
+        final Double d=Doubles.tryParse(cpuStr);
+        if (d==null) {
+            log.error("Expecting a valid Double, cpuStr="+cpuStr);
+            return null;
+        }
+        final CpuTime cpuTime=new CpuTime(Math.round(d.doubleValue()*1000.0));
+        return cpuTime;
+    }
+    
+    protected static Date parseDate(final String dateStr) {
+        if (Strings.isNullOrEmpty(dateStr)) {
+            log.debug("dateStr isNullOrEmpty");
+            return null;
+        }
+        final Double d=Doubles.tryParse(dateStr);
+        if (d==null) {
+            log.error("Expecting a valid number, dateStr="+dateStr);
+            return null;
+        }
+        
+        return new Date((long)Math.floor(d));
+    }
+    
+    /**
+     * Parse a memory value from an entry in the resourceUsage map.
+     * For example:
+     *     # without units, assume bytes (can be decimal or integer value)
+     *     maxvmem=1473015808.0000
+     *     maxvmem=1473015808
+     *     
+     *     # with units, parse with Memory.fromString
+     *     maxvmem=1015.188M
+     *     maxvmem=1.050G
+     *   
+     * @param memStr
+     * @return
+     */
+    protected static Memory parseMemory(final String memStr) {
+        if (Strings.isNullOrEmpty(memStr)) {
+            log.debug("memStr isNullOrEmpty");
+            return null;
+        }
+        final Double d=Doubles.tryParse(memStr);
+        if (d != null) {
+            if (log.isDebugEnabled()) {
+                log.debug("no units, assume bytes, memStr="+memStr);
+            }
+            return Memory.fromSizeInBytes((long)Math.floor(d));
+        }
+
+        try {
+            if (log.isDebugEnabled()) {
+                log.debug("calling Memory.fromString("+memStr+")");
+            }
+            return Memory.fromString(memStr);
+        }
+        catch (Throwable t) {
+            log.error("Expecting a valid memory spec, memStr="+memStr);
+            return null;
+        }
+    }
+
+    /**
+     * Append usage stats for a completed job, based on the given DRMAA JobInfo object.
+     * 
+     * See: man accounting(5) for details
+     * See: man getrusage(2) for details
+     * 
+     * 
+     * Example output:
+<pre>
+recording status for gpJobNo=79917, updatedJobStatus=drmJobId=169437, queueId=null, jobState=RUNNING, exitCode=null
+# The cpu time usage in seconds.
+ - cpu=2720.2300
+# The maximum vmem size in bytes. 
+ - maxvmem=1473015808.0000
+# The wallclock time the job spent in running state.
+ - wallclock=823.5770
+# The integral memory usage in Gbytes cpu seconds.
+ - mem=1283.4693
+#  64bit GMT unix time stamp in milliseconds
+ - start_time=1440658419871.0000
+ - submission_time=1440658209738.0000
+
+ - acct_cpu=2720.2300
+ - acct_io=27.9707
+ - acct_iow=0.0000
+ - acct_maxvmem=1473015808.0000
+ - acct_mem=1283.4693
+ - end_time=1440659243171.0000
+ - exit_status=0.0000
+ - io=27.9707
+ - iow=0.0000
+ - priority=0.0000
+
+ - ru_idrss=0.0000
+ - ru_inblock=64.0000
+ - ru_ismrss=0.0000
+ - ru_isrss=0.0000
+ - ru_ixrss=0.0000
+ - ru_majflt=0.0000
+ - ru_maxrss=18024.0000
+ - ru_minflt=9701.0000
+ - ru_msgrcv=0.0000
+ - ru_msgsnd=0.0000
+ - ru_nivcsw=4.0000
+ - ru_nsignals=0.0000
+ - ru_nswap=0.0000
+ - ru_nvcsw=553.0000
+ - ru_oublock=104.0000
+ - ru_stime=0.0610
+ - ru_utime=0.3289
+ - ru_wallclock=823.3000
+
+ - signal=0.0000
+ - vmem=0.0000
+
+
+</pre>
+     * 
+     * @param b
+     * @param jobInfo
+     * @throws DrmaaException
+     */
+    
+    protected Map<String,String> initResourceUsageMap(final JobInfo jobInfo) {
+        Map<?,?> usageIn=null;
+        try {
+            usageIn=jobInfo.getResourceUsage();
+        }
+        catch (Throwable t) {
+            log.error("Error getting resourceUsage from DRMAA jobInfo: "+t.getLocalizedMessage(), t);
+        }
+        if (usageIn == null || usageIn.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        SortedMap<String,String> usage=new TreeMap<String,String>();
+        if (log.isDebugEnabled()) {
+            log.debug("jobInfo.resourceUsage ...");
+        }
+        for(final Entry<?,?> e : usageIn.entrySet()) {
+            final String key=e.getKey().toString();
+            final String val= e.getValue() == null ? "" : e.getValue().toString();
+            if (log.isDebugEnabled()) {
+                log.debug(key+"="+val);
+            }
+            usage.put(key, val);
+        }
+        return usage;
+    }
+    
+    protected void logUsageStats(final DrmJobStatus.Builder b, final JobInfo jobInfo) {
+        Map<String,String> usage=initResourceUsageMap(jobInfo);
+        logUsageStats(b, usage);
+    }
+
+    protected void logUsageStats(final DrmJobStatus.Builder b, final Map<String,String> usage) {
+        b.resourceUsage(usage);
+        
+        // The cpu time usage in seconds, e.g. cpu=2720.2300
+        if (usage.containsKey("cpu")) {
+            final CpuTime cpuTime=asCpuTime(usage.get("cpu"));
+            b.cpuTime(cpuTime);
+        }
+        
+        // start_time=1440658419871.0000
+        if (usage.containsKey("start_time")) {
+            final Date startTime=parseDate(usage.get("start_time"));
+            b.startTime(startTime);
+        }
+        
+        // submission_time=1440658209738.0000
+        if (usage.containsKey("submission_time")) {
+            final Date submitTime=parseDate(usage.get("submission_time"));
+            b.submitTime(submitTime);
+        }
+        
+        // # The maximum vmem size in bytes. 
+        // maxvmem=1473015808.0000;
+        if (usage.containsKey("maxvmem")) {
+            Memory maxVmem=parseMemory(usage.get("maxvmem"));
+            if (maxVmem != null) {
+                b.memory(maxVmem);
+            }
+        }
+
+        // TODO:
+        //b.maxProcesses(maxProcesses);
+        //b.maxSwap(maxSwap);
+        //b.maxThreads(maxThreads);
+    }
+    
     protected DrmJobStatus requestStatus(final Session session, final String extJobId) throws DrmaaException {
         if (log.isDebugEnabled()) {
             log.debug("requesting status, jobId="+extJobId);
@@ -432,25 +643,12 @@ public class DrmaaV1JobRunner implements JobRunner {
             jobInfo=session.wait(extJobId, timeout_seconds);
             log.debug("wait completed!, extJobId="+extJobId);
             
-            if (log.isDebugEnabled()) {
-                Map<?,?> usage=jobInfo.getResourceUsage();
-                if (usage != null) {
-                    log.debug("jobInfo.resourceUsage ...");
-                    for(final Entry<?,?> e : usage.entrySet()) {
-                        log.debug(e.getKey()+"="+e.getValue());
-                    }
-                }
-            }
-            
             DrmJobStatus.Builder b=new DrmJobStatus.Builder()
                 .extJobId(jobInfo.getJobId());
             
-            if (jobInfo.wasAborted()) {
-                log.debug("wasAborted");
-                log.debug("jobInfo="+jobInfo);
-                b.jobState(DrmJobState.ABORTED);
-            }
-            else if (jobInfo.hasExited()) {
+            logUsageStats(b, jobInfo);
+            
+            if (jobInfo.hasExited()) {
                 log.debug("hasExited, exitStatus="+jobInfo.getExitStatus());
                 b.exitCode(jobInfo.getExitStatus());
                 if (jobInfo.getExitStatus()==0) {
@@ -460,11 +658,17 @@ public class DrmaaV1JobRunner implements JobRunner {
                     b.jobState(DrmJobState.FAILED);
                 }
             }
+            else if (jobInfo.wasAborted()) {
+                log.debug("wasAborted");
+                log.debug("jobInfo="+jobInfo);
+                b.jobState(DrmJobState.ABORTED);
+            }
             else if (jobInfo.hasSignaled()) {
                 final String msg="hasSignaled, terminatingSignal="+jobInfo.getTerminatingSignal();
                 log.debug(msg);
                 b.jobState(DrmJobState.FAILED);
                 b.jobStatusMessage(msg);
+                b.terminatingSignal(jobInfo.getTerminatingSignal());
             }
             else if (jobInfo.hasCoreDump()) {
                 log.debug("hasCoreDump");
@@ -511,6 +715,10 @@ public class DrmaaV1JobRunner implements JobRunner {
         }
 
         // job not finished ...
+        if (log.isDebugEnabled()) {
+            // TODO: add more details
+            log.debug("job not finished, ");
+        }
         final DrmJobState gpState=requestDrmJobState(session, extJobId);
         return new DrmJobStatus.Builder()
             .extJobId(extJobId)
