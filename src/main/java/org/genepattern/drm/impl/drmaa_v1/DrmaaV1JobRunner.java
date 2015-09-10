@@ -147,6 +147,7 @@ public class DrmaaV1JobRunner implements JobRunner {
     @Override
     public String startJob(final DrmJobSubmission jobSubmission) throws CommandExecutorException {
         validateCmdLine(jobSubmission);
+        Util.logCommandLine(jobSubmission);
         final Session session=getSession();
         try {
             final String jobId=submitJob(session, jobSubmission);
