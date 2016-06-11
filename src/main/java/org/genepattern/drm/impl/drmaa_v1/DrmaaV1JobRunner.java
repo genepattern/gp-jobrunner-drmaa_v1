@@ -1,6 +1,7 @@
 package org.genepattern.drm.impl.drmaa_v1;
 
 import java.io.File;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -21,7 +22,10 @@ import org.genepattern.drm.DrmJobStatus;
 import org.genepattern.drm.DrmJobSubmission;
 import org.genepattern.drm.JobRunner;
 import org.genepattern.drm.Memory;
+import org.genepattern.drm.util.Env;
+import org.genepattern.server.config.Value;
 import org.genepattern.server.executor.CommandExecutorException;
+import org.genepattern.server.executor.CommandProperties;
 import org.ggf.drmaa.AuthorizationException;
 import org.ggf.drmaa.DrmCommunicationException;
 import org.ggf.drmaa.DrmaaException;
@@ -37,6 +41,7 @@ import org.ggf.drmaa.SessionFactory;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.primitives.Doubles;
+import com.sun.grid.drmaa.SessionImpl;
 
 /**
  * JobRunner for GridEngine integration with DRMAA v1 library.
@@ -85,13 +90,17 @@ executors:
 public class DrmaaV1JobRunner implements JobRunner {
     private static final Logger log = Logger.getLogger(DrmaaV1JobRunner.class);
 
-    private Session session=null;
-    private DrmaaException sessionInitError=null;
-    
     /**
      * Set the 'job.ge.pe_type' to specify the parallel environment for a multi-core job
      */
     public static final String PROP_PE_TYPE="job.ge.pe_type";
+
+    /**
+     * Set the 'DRMAA_LIBRARY_PATH' to the full path to the drmaa library. 
+     *     System.load(<DRMAA_LIBRARY_PATH>);
+     * 
+     */
+    public static final String PROP_DRMAA_LIBRARY_PATH="DRMAA_LIBRARY_PATH";
  
     /**
      * lookup table for selecting an entry from the GenePattern DrmJobState enum 
@@ -114,18 +123,77 @@ public class DrmaaV1JobRunner implements JobRunner {
         map.put(Session.FAILED, DrmJobState.FAILED);        
         jobStateMap = Collections.unmodifiableMap(map);
     }
+    
+    private Session session=null;
+    private DrmaaException sessionInitError=null;
+    private Value ld_library_path=null;
+    private Value drmaaLibPath=null;
+    private Value sgeEnv=null;
+
+    public void setCommandProperties(final CommandProperties properties) {
+        // /broad/uge/8.3.1p6/lib/lx-amd64        
+        this.ld_library_path=properties.get("LD_LIBRARY_PATH");
+        // optionally load the library path
+        this.drmaaLibPath=properties.get(PROP_DRMAA_LIBRARY_PATH);
+        // optionally set environment variables
+        this.sgeEnv=properties.get("SGE_ENV");
+    }
+
+    protected String concatProps(final String prop, final String props) {
+        if (props==null || props.length()==0) {
+            return prop;
+        }
+        else {
+            return prop + System.getProperty("path.separator") + props;
+        }
+    }
 
     public void start() {
+        if (ld_library_path != null) {
+            for(final String path : ld_library_path.getValues()) {
+                final String message="adding path to LD_LIBRARY_PATH, path="+path;
+                try {
+                    log.info(message); 
+                    addLibraryPath(path);
+                }
+                catch (Throwable t) {
+                    log.error("Error "+message, t);
+                }
+            }
+        }
+            
+        if (drmaaLibPath != null) {
+            for(final String library : drmaaLibPath.getValues()) {
+                try {
+                   log.info("loading library '"+library+"' ...");
+                    System.load(library);
+                }
+                catch (Throwable t) {
+                    log.error("Error in System.load('"+library+"')", t);
+                }
+            }
+        }
+
+        if (sgeEnv != null && sgeEnv.isMap()) {
+            final Env env=new Env();
+            for(final Entry<?,?> entry : sgeEnv.getMap().entrySet()) {
+                final String name= (String) entry.getKey();
+                final String value= (String) entry.getValue();
+                log.info("setting system environment "+name+"="+value);
+                env.setEnvironmentVariable(name, value);
+            }
+        }
+        
         try {
             this.sessionInitError=null;
             this.session=initSession();
-            if (log.isDebugEnabled()) {
-                debugInitTemplate(this.session);
-            }
         }
         catch (final DrmaaException e) {
             log.error("Error initializing session on startup", e);
             this.sessionInitError=e;
+        }
+        catch (final Throwable t) {
+            log.error("Unexpected error initializing session on startup", t);
         }
     }
     
@@ -206,17 +274,131 @@ public class DrmaaV1JobRunner implements JobRunner {
         return requestCancelJob(session, drmJobRecord.getExtJobId());
     }
     
-    protected Session initSession() throws DrmaaException {
-        Session session=SessionFactory.getFactory().getSession();
+    protected static Session initSession() throws DrmaaException {
         log.info("initializing session...");
+        final Session session=
+                //initSessionFromFactory();
+                initSessionFromConstructor();
         log.info("\tversion: "+session.getVersion());
         log.info("\tdrmSystem: "+session.getDrmSystem());
         log.info("\tdrmaaImplementation: "+ session.getDrmaaImplementation());
+        
         session.init(null);
         log.info("Done!");
+        if (log.isDebugEnabled()) {
+            debugInitTemplate(session);
+        }
+        return session;
+    }
+
+    /**
+     * Create the DRMAA session; assumes that the environment at JVM startup
+     * is enabled for Univa Grid Engine.
+     * 
+     * On Broad hosted systems this is achieved by loading a dotkit before starting
+     * the GenePattern Server. E.g.
+     *     use UGER
+     * 
+     * 
+     * @return
+     * @throws DrmaaException
+     */
+    protected static Session initSessionFromFactory() throws DrmaaException {
+        final Session session=SessionFactory.getFactory().getSession();
         return session;
     }
     
+    protected static Session initSessionFromConstructor() {
+        final Session thisSession = new SessionImpl();
+        return thisSession;
+    }
+
+    /**
+     * Initialize the session ... without requiring 'use UGER' before server startup.
+     * See: https://blogs.oracle.com/templedf/entry/drmaa_and_the_shared_library
+     * 
+     * environment variables set by the 'use UGER' command:
+<pre>
+DRMAA_LIBRARY_PATH=/broad/uge/research/lib/lx-amd64/libdrmaa.so
+SGE_CELL=research
+SGE_CLUSTER_NAME=uger
+SGE_EXECD_PORT=6445
+SGE_QMASTER_PORT=6444
+SGE_ROOT=/broad/uge/research
+
+# the following are appended to existing environment 
+LD_LIBRARY_PATH=/broad/uge/research/lib/lx-amd64
+PATH=/broad/uge/research/bin/lx-amd6
+
+# path to the drmaa.jar file
+/broad/uge/research/lib/drmaa.jar
+</pre>
+
+    
+<pre>
+    session.getVersion(): 1.0
+    session.getDrmSystem(): UGE 8.3.0
+    session.getDrmaaImplementation(): UGE 8.3.0
+    session.getAttributeNames():
+        drmaa_job_category
+        drmaa_start_time
+        drmaa_v_env
+        drmaa_error_path
+        drmaa_v_email
+        drmaa_js_state
+        drmaa_wd
+        drmaa_input_path
+        drmaa_remote_command
+        drmaa_output_path
+        drmaa_block_email
+        drmaa_job_name
+        drmaa_native_specification
+        drmaa_join_files
+        drmaa_v_argv
+</pre>
+
+     * Environment variables set by the '.uges-8.3.1p6' dotkit
+<pre>
+DRMAA_LIBRARY_PATH=/broad/uge/8.3.1p6/lib/lx-amd64/libdrmaa.so
+LD_LIBRARY_PATH=/broad/uge/8.3.1p6/lib/lx-amd64
+PATH=/broad/uge/8.3.1p6/bin/lx-amd64
+SGE_CELL=service
+SGE_CLUSTER_NAME=uges-831p6
+SGE_EXECD_PORT=6445
+SGE_QMASTER_PORT=6444
+SGE_ROOT=/broad/uge/8.3.1p6
+
+</pre>
+     */
+    protected void initSession_use_UGER() {
+    }
+    
+    /**
+     * Adds the specified path to the java library path
+     *
+     * @param pathToAdd the path to add
+     * @throws Exception
+     */
+    public static void addLibraryPath(final String pathToAdd) throws Exception{
+        final Field usrPathsField = ClassLoader.class.getDeclaredField("usr_paths");
+        usrPathsField.setAccessible(true);
+
+        //get array of paths
+        final String[] paths = (String[])usrPathsField.get(null);
+
+        //check if the path to add is already present
+        for(String path : paths) {
+            if(path.equals(pathToAdd)) {
+                return;
+            }
+        }
+
+        //add the new path
+        final String[] newPaths = Arrays.copyOf(paths, paths.length + 1);
+        newPaths[newPaths.length-1] = pathToAdd;
+        usrPathsField.set(null, newPaths);
+    }
+
     protected Session getSession() throws CommandExecutorException {
         if (this.session==null) {
             if (this.sessionInitError != null) {
@@ -233,7 +415,7 @@ public class DrmaaV1JobRunner implements JobRunner {
         return new File(jobSubmission.getWorkingDir(), name).getAbsolutePath();
     }
     
-    protected void debugInitTemplate(final Session session) {
+    protected static void debugInitTemplate(final Session session) {
         if (session==null) {
             log.error("session==null");
             return;
