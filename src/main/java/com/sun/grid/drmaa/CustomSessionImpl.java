@@ -22,7 +22,7 @@ import org.ggf.drmaa.Version;
  * 
  * @author pcarr
  */
-public class SessionImpl
+public class CustomSessionImpl
 implements Session
 {
     private static final Logger log = Logger.getLogger(SessionImpl.class);
@@ -88,8 +88,11 @@ implements Session
     public JobTemplate createJobTemplate()
     throws DrmaaException
     {
+        //TODO: implement this
         int id = nativeAllocateJobTemplate();
-        return new JobTemplateImpl(this, id);
+        //return new JobTemplateImpl(this, id);
+        throw new DrmaaException() {
+        };
     }
     
     @Override
