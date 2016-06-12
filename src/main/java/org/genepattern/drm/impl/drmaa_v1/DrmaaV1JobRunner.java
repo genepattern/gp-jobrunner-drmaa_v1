@@ -41,7 +41,6 @@ import org.ggf.drmaa.SessionFactory;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.primitives.Doubles;
-import com.sun.grid.drmaa.SessionImpl;
 
 /**
  * JobRunner for GridEngine integration with DRMAA v1 library.
@@ -78,6 +77,22 @@ executors:
             #
             job.ge.pe_type: smp
 
+            # Example configuration (still under construction) for Broad UGER cluster
+            # Set system environment after JVM startup (instead via 'use UGER')
+            # 
+            # See: https://blogs.oracle.com/templedf/entry/drmaa_and_the_shared_library
+            #
+ 
+            DRMAA_LIBRARY_PATH: [ "/xchip/gpdev/servers/gp-trunk/gp/gputiljni/libgputil.so" ]
+            # UGER system environment variables
+            LD_LIBRARY_PATH: [ "/broad/uge/research/lib/lx-amd64" ]
+            SGE_ENV: {
+                "SGE_ROOT":         "/broad/uge/research",
+                "SGE_CELL":         "research",
+                "SGE_CLUSTER_NAME": "uger",
+                "SGE_EXECD_PORT":   "6445",
+                "SGE_QMASTER_PORT": "6444",
+            }
  * </pre>
  * 
  * <h1>Debugging Guide</h1>
@@ -156,42 +171,7 @@ public class DrmaaV1JobRunner implements JobRunner {
         }
     }
 
-    public void start() {
-        if (ld_library_path != null) {
-            for(final String path : ld_library_path.getValues()) {
-                final String message="adding path to LD_LIBRARY_PATH, path="+path;
-                try {
-                    log.info(message); 
-                    addLibraryPath(path);
-                }
-                catch (Throwable t) {
-                    log.error("Error "+message, t);
-                }
-            }
-        }
-            
-        if (drmaaLibPath != null) {
-            for(final String library : drmaaLibPath.getValues()) {
-                try {
-                   log.info("loading library '"+library+"' ...");
-                    System.load(library);
-                }
-                catch (Throwable t) {
-                    log.error("Error in System.load('"+library+"')", t);
-                }
-            }
-        }
-
-        if (sgeEnv != null && sgeEnv.isMap()) {
-            final Env env=new Env();
-            for(final Entry<?,?> entry : sgeEnv.getMap().entrySet()) {
-                final String name= (String) entry.getKey();
-                final String value= (String) entry.getValue();
-                log.info("setting system environment "+name+"="+value);
-                env.setEnvironmentVariable(name, value);
-            }
-        }
-        
+    public void start() { 
         try {
             this.sessionInitError=null;
             this.session=initSession();
@@ -272,8 +252,6 @@ public class DrmaaV1JobRunner implements JobRunner {
                 .jobStatusMessage("job queue error: "+t.getLocalizedMessage())
             .build();
         }
-        
-
     }
 
     @Override
@@ -282,11 +260,73 @@ public class DrmaaV1JobRunner implements JobRunner {
         return requestCancelJob(session, drmJobRecord.getExtJobId());
     }
     
-    protected static Session initSession() throws DrmaaException {
+    /**
+     * Initialize the DRMAA session based on the system environment
+     * when starting the server. For example,
+     *     use '.uges-8.3.1p6'
+     *     nohup ./StartGenePatternServer &
+     * 
+     * Environment for Broad hosted UGES cluster:
+     *     DRMAA_LIBRARY_PATH=/broad/uge/8.3.1p6/lib/lx-amd64/libdrmaa.so
+     *     LD_LIBRARY_PATH=/broad/uge/8.3.1p6/lib/lx-amd64
+     *     PATH=/broad/uge/8.3.1p6/bin/lx-amd64
+     *     SGE_ROOT=/broad/uge/8.3.1p6
+     *     SGE_CELL=service
+     *     SGE_CLUSTER_NAME=uges-831p6
+     *     SGE_EXECD_PORT=6445
+     *     SGE_QMASTER_PORT=6444
+     * 
+     * For multi-cluster systems, the environment variables must be set at runtime 
+     * after the startup of the JVM. These are set as a map in the config_yaml file.
+     *     SGE_ENV: {
+     *         SGE_ROOT: "/path/to/ge",
+     *         ...
+     *     }
+     * 
+     * @return
+     * @throws DrmaaException
+     */
+    protected Session initSession() throws DrmaaException {
+        // optionally modify the LD_LIBRARY_PATH ...
+        if (ld_library_path != null) {
+            for(final String path : ld_library_path.getValues()) {
+                final String message="adding path to LD_LIBRARY_PATH, path="+path;
+                try {
+                    log.info(message); 
+                    addLibraryPath(path);
+                }
+                catch (Throwable t) {
+                    log.error("Error "+message, t);
+                }
+            }
+        }
+        
+        // optionally load shared libraries ... 
+        if (drmaaLibPath != null) {
+            for(final String library : drmaaLibPath.getValues()) {
+                try {
+                    log.info("loading library '"+library+"' ...");
+                    System.load(library);
+                }
+                catch (Throwable t) {
+                    log.error("Error in System.load('"+library+"')", t);
+                }
+            }
+        }
+
+        // optionally set system environment variables ...
+        if (sgeEnv != null && sgeEnv.isMap()) {
+            final Env env=new Env();
+            for(final Entry<?,?> entry : sgeEnv.getMap().entrySet()) {
+                final String name= (String) entry.getKey();
+                final String value= (String) entry.getValue();
+                log.info("setting system environment "+name+"="+value);
+                env.setEnvironmentVariable(name, value);
+            }
+        }
+        
         log.info("initializing session...");
-        final Session session=
-                //initSessionFromFactory();
-                initSessionFromConstructor();
+        final Session session=SessionFactory.getFactory().getSession();
         log.info("\tversion: "+session.getVersion());
         log.info("\tdrmSystem: "+session.getDrmSystem());
         log.info("\tdrmaaImplementation: "+ session.getDrmaaImplementation());
@@ -299,88 +339,6 @@ public class DrmaaV1JobRunner implements JobRunner {
         return session;
     }
 
-    /**
-     * Create the DRMAA session; assumes that the environment at JVM startup
-     * is enabled for Univa Grid Engine.
-     * 
-     * On Broad hosted systems this is achieved by loading a dotkit before starting
-     * the GenePattern Server. E.g.
-     *     use UGER
-     * 
-     * 
-     * @return
-     * @throws DrmaaException
-     */
-    protected static Session initSessionFromFactory() throws DrmaaException {
-        final Session session=SessionFactory.getFactory().getSession();
-        return session;
-    }
-    
-    protected static Session initSessionFromConstructor() {
-        final Session thisSession = new SessionImpl();
-        return thisSession;
-    }
-
-    /**
-     * Initialize the session ... without requiring 'use UGER' before server startup.
-     * See: https://blogs.oracle.com/templedf/entry/drmaa_and_the_shared_library
-     * 
-     * environment variables set by the 'use UGER' command:
-<pre>
-DRMAA_LIBRARY_PATH=/broad/uge/research/lib/lx-amd64/libdrmaa.so
-SGE_CELL=research
-SGE_CLUSTER_NAME=uger
-SGE_EXECD_PORT=6445
-SGE_QMASTER_PORT=6444
-SGE_ROOT=/broad/uge/research
-
-# the following are appended to existing environment 
-LD_LIBRARY_PATH=/broad/uge/research/lib/lx-amd64
-PATH=/broad/uge/research/bin/lx-amd6
-
-# path to the drmaa.jar file
-/broad/uge/research/lib/drmaa.jar
-</pre>
-
-    
-<pre>
-    session.getVersion(): 1.0
-    session.getDrmSystem(): UGE 8.3.0
-    session.getDrmaaImplementation(): UGE 8.3.0
-    session.getAttributeNames():
-        drmaa_job_category
-        drmaa_start_time
-        drmaa_v_env
-        drmaa_error_path
-        drmaa_v_email
-        drmaa_js_state
-        drmaa_wd
-        drmaa_input_path
-        drmaa_remote_command
-        drmaa_output_path
-        drmaa_block_email
-        drmaa_job_name
-        drmaa_native_specification
-        drmaa_join_files
-        drmaa_v_argv
-</pre>
-
-     * Environment variables set by the '.uges-8.3.1p6' dotkit
-<pre>
-DRMAA_LIBRARY_PATH=/broad/uge/8.3.1p6/lib/lx-amd64/libdrmaa.so
-LD_LIBRARY_PATH=/broad/uge/8.3.1p6/lib/lx-amd64
-PATH=/broad/uge/8.3.1p6/bin/lx-amd64
-SGE_CELL=service
-SGE_CLUSTER_NAME=uges-831p6
-SGE_EXECD_PORT=6445
-SGE_QMASTER_PORT=6444
-SGE_ROOT=/broad/uge/8.3.1p6
-
-</pre>
-     */
-    protected void initSession_use_UGER() {
-    }
-    
     /**
      * Adds the specified path to the java library path
      *
