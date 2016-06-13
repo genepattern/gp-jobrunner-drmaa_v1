@@ -1,7 +1,6 @@
 package org.genepattern.drm.impl.drmaa_v1;
 
 import java.io.File;
-import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -285,7 +284,7 @@ public class DrmaaV1JobRunner implements JobRunner {
                 final String message="adding path to LD_LIBRARY_PATH, path="+path;
                 try {
                     log.info(message); 
-                    addLibraryPath(path);
+                    Util.addLibraryPath(path);
                 }
                 catch (Throwable t) {
                     log.error("Error "+message, t);
@@ -329,32 +328,6 @@ public class DrmaaV1JobRunner implements JobRunner {
             debugInitTemplate(session);
         }
         return session;
-    }
-
-    /**
-     * Adds the specified path to the java library path
-     *
-     * @param pathToAdd the path to add
-     * @throws Exception
-     */
-    public static void addLibraryPath(final String pathToAdd) throws Exception{
-        final Field usrPathsField = ClassLoader.class.getDeclaredField("usr_paths");
-        usrPathsField.setAccessible(true);
-
-        //get array of paths
-        final String[] paths = (String[])usrPathsField.get(null);
-
-        //check if the path to add is already present
-        for(String path : paths) {
-            if(path.equals(pathToAdd)) {
-                return;
-            }
-        }
-
-        //add the new path
-        final String[] newPaths = Arrays.copyOf(paths, paths.length + 1);
-        newPaths[newPaths.length-1] = pathToAdd;
-        usrPathsField.set(null, newPaths);
     }
 
     protected Session getSession() throws CommandExecutorException {

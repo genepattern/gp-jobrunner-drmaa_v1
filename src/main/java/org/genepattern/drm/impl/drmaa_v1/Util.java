@@ -4,6 +4,8 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.util.Arrays;
 
 import org.apache.log4j.Logger;
 import org.genepattern.drm.DrmJobSubmission;
@@ -106,5 +108,31 @@ public class Util {
         return pathElement + File.pathSeparator + pathIn;
     }
     
+    /**
+     * Adds the specified path to the java library path
+     *
+     * @param pathToAdd the path to add
+     * @throws Exception
+     */
+    public static void addLibraryPath(final String pathToAdd) throws Exception{
+        final Field usrPathsField = ClassLoader.class.getDeclaredField("usr_paths");
+        usrPathsField.setAccessible(true);
+
+        //get array of paths
+        final String[] paths = (String[])usrPathsField.get(null);
+
+        //check if the path to add is already present
+        for(String path : paths) {
+            if(path.equals(pathToAdd)) {
+                return;
+            }
+        }
+
+        //add the new path
+        final String[] newPaths = Arrays.copyOf(paths, paths.length + 1);
+        newPaths[newPaths.length-1] = pathToAdd;
+        usrPathsField.set(null, newPaths);
+    }
+
 
 }
