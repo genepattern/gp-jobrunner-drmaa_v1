@@ -5,7 +5,10 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 import org.apache.log4j.Logger;
 import org.genepattern.drm.DrmJobSubmission;
@@ -134,5 +137,25 @@ public class Util {
         usrPathsField.set(null, newPaths);
     }
 
+    /**
+     * Removes the specified path from the java library path
+     *
+     * @param pathToAdd the path to add
+     * @throws Exception
+     */
+    public static void removeLibraryPath(final String pathToRemove) throws Exception{
+        final Field usrPathsField = ClassLoader.class.getDeclaredField("usr_paths");
+        usrPathsField.setAccessible(true);
+
+        //get array of paths
+        final String[] paths = (String[])usrPathsField.get(null);
+        
+        final List<String> a=new ArrayList<String>(Arrays.asList(paths));
+        a.removeAll(Collections.singleton(pathToRemove));
+        if (a.size() < paths.length) {
+            String[] newPaths = a.toArray(new String[0]);
+            usrPathsField.set(null, newPaths);
+        }
+    }
 
 }
