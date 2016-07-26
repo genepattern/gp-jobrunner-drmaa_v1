@@ -1,0 +1,68 @@
+#
+# Example config_yaml file for DRMAA v1 integration 
+#
+# Note: this is a YAML file, indentation is important, TAB characters are not permitted.
+#     You must use an exact number of spaces to denote each indentation level.
+#     This file uses 4 space characters for each level.
+#
+default.properties:
+    executor: UGER
+
+executors:
+
+    #
+    # JobRunner API integration for Univa Grid Engine with DRMAA v1
+    #
+    UGER:
+        classname: org.genepattern.server.executor.drm.JobExecutor
+        configuration.properties:
+            jobRunnerClassname: org.genepattern.drm.impl.drmaa_v1.DrmaaV1JobRunner
+            jobRunnerName: UGER
+            # fixedDelay: 2000
+            minDelay: 2000
+            useDynamicDelay: true
+            # when status check fails, wait 5 minutes and try again
+            #     kill if status check fails for longer than 'retryCutoff' of one day
+            retryCutoff: 1-00:00:00
+
+        default.properties:
+            job.logFile: .uger.out
+            job.queue: short
+            job.memory: 2 Gb
+            job.project: genepattern
+
+            ## 
+            # UGER specific flags
+            
+            ##
+            # [optional] prepend the '-clear' arg to the native specification
+            #     Equivalent to adding '-clear' as the first arg of the bsub command
+            #     Default: false
+            # job.ge.clear: true
+
+            ##
+            # [optional] set the Parallel Execution environment for a multi-core job
+            # This flag is used when the job.cpuCount or job.nodeCount > 1.
+            #  -pe <job.gp.pe_type> <job.cpuCount>
+            # Use the 'qconf -spl' command to list available parallel environments. Broad hosted UGER options are:
+            #   mpi | openmpi | smp
+            #
+            # To learn more about a specific PE, type something like:
+            #   qconf -sp openmpi
+            #
+            job.ge.pe_type: smp
+
+module.properties:
+    TestStep:
+        # per-module, custom job.ge.clear
+        job.ge.clear: "true"
+        # per-module, custom job.queue
+        job.queue: "long"
+
+group.properties:
+    administrators:
+        job.ge.clear: true
+
+user.properties:
+    custom_user:
+        job.ge.clear: true

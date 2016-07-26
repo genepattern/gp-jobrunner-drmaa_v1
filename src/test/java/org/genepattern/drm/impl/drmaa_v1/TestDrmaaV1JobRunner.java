@@ -264,6 +264,23 @@ public class TestDrmaaV1JobRunner {
     }
     
     @Test
+    public void jobQueue_clear() {
+        final GpConfig gpConfig=new GpConfig.Builder()
+            .addProperty(DrmaaV1JobRunner.PROP_CLEAR, "true")
+            .addProperty(JobRunner.PROP_QUEUE, "short")
+        .build();
+        final DrmJobSubmission job=new DrmJobSubmission.Builder(jobDir)
+            .jobContext(jobContext)
+            .gpConfig(gpConfig)
+        .build();
+        final List<String> args=jobRunner.initNativeSpecification(job);
+        // -clear
+        assertEquals("expecting '-clear' as first arg in native specification", "-clear", args.get(0));
+        // -q <queue>
+        assertArgWithFlag(args, "-q", "short"); 
+    }
+    
+    @Test
     public void jobProject() {
         job=mock(DrmJobSubmission.class);
         when(job.getProperty(JobRunner.PROP_PROJECT)).thenReturn("my_project");
