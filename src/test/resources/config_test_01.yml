@@ -1,0 +1,11 @@
+#
+# config_yaml file for junit test
+#
+default.properties:
+    executor: UGER
+
+executors:
+    UGER:
+        classname: org.genepattern.server.executor.drm.JobExecutor
+        default.properties:
+            job.ge.clear: true

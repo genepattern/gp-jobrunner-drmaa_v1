@@ -89,6 +89,14 @@ public class DrmaaV1JobRunner implements JobRunner {
     private DrmaaException sessionInitError=null;
     
     /**
+     * Set the 'job.ge.clear' boolean flag to clear default settings as the first arg of the 
+     * native specification, e.g.
+     *     job.ge.clear: true
+     *  
+     */
+    public static final String PROP_CLEAR="job.ge.clear";
+    
+    /**
      * Set the 'job.ge.pe_type' to specify the parallel environment for a multi-core job
      */
     public static final String PROP_PE_TYPE="job.ge.pe_type";
@@ -277,12 +285,25 @@ public class DrmaaV1JobRunner implements JobRunner {
         }
     }
     
+    protected boolean isClear(final DrmJobSubmission jobSubmission) {
+        if (jobSubmission == null || jobSubmission.getGpConfig() == null) {
+            return false;
+        }
+        return jobSubmission.getGpConfig().getGPBooleanProperty(jobSubmission.getJobContext(), PROP_CLEAR);
+    }
+    
     /**
      * @see https://blogs.oracle.com/templedf/entry/using_drm_specific_functionality_via
      * @return
      */
     protected List<String> initNativeSpecification(final DrmJobSubmission jobSubmission) {
         final List<String> rval=new ArrayList<String>();
+        
+        // optional put the '-clear' flag at the start of the spec
+        if (isClear(jobSubmission)) {
+            rval.add("-clear");
+        }
+        
         // always use the '-o' flag
         final String stdout=initFilepath(jobSubmission.getWorkingDir(), jobSubmission.getStdoutFile(), "stdout.txt");
         rval.add("-o");

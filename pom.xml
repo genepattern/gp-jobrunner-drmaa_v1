@@ -4,7 +4,7 @@
   <groupId>genepattern.org</groupId>
   <artifactId>gp-jobrunner-drmaa_v1</artifactId>
   <packaging>jar</packaging>
-  <version>0.1</version>
+  <version>0.1.1</version>
   <name>gp-jobrunner-drmaa_v1</name>
   <url>http://maven.apache.org</url>
 
@@ -41,6 +41,20 @@
           <revisionOnScmFailure>unknownbuild</revisionOnScmFailure>   
         </configuration>
       </plugin>
+      
+      <!-- Example: how to add an additional classpath element for junit tests -->
+      <!--
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>2.12.4</version>
+        <configuration>
+          <additionalClasspathElements>
+            <additionalClasspathElement>${basedir}/src/test/lib/jdom.jar</additionalClasspathElement>
+          </additionalClasspathElements>
+        </configuration>
+      </plugin>
+      -->
     </plugins>
     <!--   finalName>${project.artifactId}-${project.version}-${maven.build.timestamp}</finalName -->
     <finalName>${project.artifactId}-${project.version}-SNAPSHOT-r${buildNumber}</finalName>
@@ -68,7 +82,7 @@
     <dependency>
         <groupId>org.genepattern</groupId>
         <artifactId>gp-full</artifactId>
-        <version>3.9.4</version>
+        <version>3.9.8-141</version>
      </dependency>
 
     <dependency>
@@ -96,5 +110,23 @@
         <version>1.9.5</version>
         <scope>test</scope>
     </dependency>
+
+    <!-- https://mvnrepository.com/artifact/org.yaml/snakeyaml -->
+    <dependency>
+        <groupId>org.yaml</groupId>
+        <artifactId>snakeyaml</artifactId>
+        <version>1.6</version>
+        <scope>test</scope>
+    </dependency>
+
+    <!-- ./website/WEB-INF/lib/jdom.jar -->
+    <!-- https://mvnrepository.com/artifact/org.jdom/jdom -->
+    <dependency>
+        <groupId>org.jdom</groupId>
+        <artifactId>jdom</artifactId>
+        <version>1.1</version>
+        <scope>test</scope>
+    </dependency>
+
   </dependencies>
 </project>
