@@ -111,7 +111,7 @@ public class DrmaaV1JobRunner implements JobRunner {
      *  
      */
     public static final String PROP_CLEAR="job.ge.clear";
-    
+
     /**
      * Set the 'job.ge.pe_type' to specify the parallel environment for a multi-core job
      */

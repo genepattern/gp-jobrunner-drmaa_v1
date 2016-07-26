@@ -2,6 +2,7 @@
 A GenePattern JobRunner for GridEngine integration.
 To run the tests:
     mvn test
+
 To build the jar file:
     mvn package
 
