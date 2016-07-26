@@ -4,9 +4,16 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 import org.apache.log4j.Logger;
 import org.genepattern.drm.DrmJobSubmission;
+
+import com.google.common.base.Strings;
 
 public class Util {
     private static final Logger log = Logger.getLogger(Util.class);
@@ -72,6 +79,82 @@ public class Util {
                     log.error(e);
                 }
             }
+        }
+    }
+
+    /**
+     * Prepend an element to the beginning of a file path. 
+     * For example to add another location to the LD_LIBRARY_PATH,
+     *     String newPath = prependPath("/new/location", System.getProperty("java.library.path"));
+     * 
+     * @param pathElement - the element to add to the initial path
+     * @param pathIn
+     * @return
+     */
+    protected static String prependPath(final String pathElement, final String pathIn) {
+        if (Strings.isNullOrEmpty(pathIn)) {
+            return pathElement;
+        }
+        if (Strings.isNullOrEmpty(pathElement)) {
+            // don't append 
+            return pathIn;
+        }
+        // double-check for duplicates
+        if (pathIn.contains(pathElement)) {
+            final String[] pathInElements=pathIn.split(File.pathSeparator);
+            for(final String pathInElement : pathInElements) {
+                if (pathInElement.equals(pathElement)) {
+                    return pathIn;
+                }
+            }
+        }
+        return pathElement + File.pathSeparator + pathIn;
+    }
+    
+    /**
+     * Adds the specified path to the java library path
+     *
+     * @param pathToAdd the path to add
+     * @throws Exception
+     */
+    public static void addLibraryPath(final String pathToAdd) throws Exception{
+        final Field usrPathsField = ClassLoader.class.getDeclaredField("usr_paths");
+        usrPathsField.setAccessible(true);
+
+        //get array of paths
+        final String[] paths = (String[])usrPathsField.get(null);
+
+        //check if the path to add is already present
+        for(String path : paths) {
+            if(path.equals(pathToAdd)) {
+                return;
+            }
+        }
+
+        //add the new path
+        final String[] newPaths = Arrays.copyOf(paths, paths.length + 1);
+        newPaths[newPaths.length-1] = pathToAdd;
+        usrPathsField.set(null, newPaths);
+    }
+
+    /**
+     * Removes the specified path from the java library path
+     *
+     * @param pathToAdd the path to add
+     * @throws Exception
+     */
+    public static void removeLibraryPath(final String pathToRemove) throws Exception{
+        final Field usrPathsField = ClassLoader.class.getDeclaredField("usr_paths");
+        usrPathsField.setAccessible(true);
+
+        //get array of paths
+        final String[] paths = (String[])usrPathsField.get(null);
+        
+        final List<String> a=new ArrayList<String>(Arrays.asList(paths));
+        a.removeAll(Collections.singleton(pathToRemove));
+        if (a.size() < paths.length) {
+            String[] newPaths = a.toArray(new String[0]);
+            usrPathsField.set(null, newPaths);
         }
     }
 
