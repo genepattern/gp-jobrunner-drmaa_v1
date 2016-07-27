@@ -42,61 +42,9 @@ import com.google.common.base.Strings;
 import com.google.common.primitives.Doubles;
 
 /**
- * JobRunner for GridEngine integration with DRMAA v1 library.
- * 
- * <h1>Configuration guide</h1>
- * 
- * Example config_yaml entry:
-<pre>
-executors:
-    #
-    # JobRunner API integration for Univa Grid Engine with DRMAA v1
-    #
-    UGER:
-        classname: org.genepattern.server.executor.drm.JobExecutor
-        configuration.properties:
-            jobRunnerClassname: org.genepattern.drm.impl.drmaa_v1.DrmaaV1JobRunner
-            jobRunnerName: UGER
-        default.properties:
-            job.queue: short
-
-            ### 
-            # UGER specific flags
-            ###
-            
-            # [optional] set the Parallel Execution environment for a multi-core job
-            # 
-            # This flag is used when the job.cpuCount or job.nodeCount > 1.
-            #     -pe <job.gp.pe_type> <job.cpuCount>
-            # Use the 'qconf -spl' command to list available parallel environments. Broad hosted UGER options are:
-            #     mpi | openmpi | smp
-            #
-            # To learn more about a specific PE, type something like:
-            #     qconf -sp openmpi
-            #
-            job.ge.pe_type: smp
-
-            # Example configuration (still under construction) for Broad UGER cluster
-            # Set system environment after JVM startup (instead via 'use UGER')
-            # 
-            # See: https://blogs.oracle.com/templedf/entry/drmaa_and_the_shared_library
-            #
- 
-            DRMAA_LIBRARY_PATH: [ "/xchip/gpdev/servers/gp-trunk/gp/gputiljni/libgputil.so" ]
-            # UGER system environment variables
-            LD_LIBRARY_PATH: [ "/broad/uge/research/lib/lx-amd64" ]
-            SGE_ENV: {
-                "SGE_ROOT":         "/broad/uge/research",
-                "SGE_CELL":         "research",
-                "SGE_CLUSTER_NAME": "uger",
-                "SGE_EXECD_PORT":   "6445",
-                "SGE_QMASTER_PORT": "6444",
-            }
- * </pre>
- * 
- * <h1>Debugging Guide</h1>
- * Example GridEngine command lines.
- * 
+ * JobRunner for GridEngine integration with DRMAA v1 library. 
+ * See ./src/test/resources/config_example_drmaa_v1.yaml for an 
+ * example config_yaml entry.
  * 
  * @author pcarr
  *
