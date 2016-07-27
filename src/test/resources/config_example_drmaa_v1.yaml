@@ -38,6 +38,16 @@ executors:
             # [optional] prepend the '-clear' arg to the native specification
             #     Equivalent to adding '-clear' as the first arg of the bsub command
             #     Default: false
+            #
+            #     This is a workaround for a known issue with Univa Grid Engine (circa 8.4.0)
+            #     which causes custom queue requests (e.g. -q long) to be appended to the system wide
+            #     default queue instead of replacing it. 
+            #
+            #     Note: another workaround is to create a ~/.sge_request file, as a copy of the system default
+            #         cp $SGE_ROOT/$SGE_CELL/common/sge_request ~/.sge_request
+            #     Add '-clear' as the first entry in that file, and customize as necessary. 
+            #     For more details: man sge_request
+            # 
             # job.ge.clear: true
 
             ##
