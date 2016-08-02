@@ -1,0 +1,39 @@
+#
+# junit test-case: Request complex attributes of the form:
+#     -l {resource_name}={resource_value}
+#
+default.properties:
+    executor: UGER
+
+executors:
+    UGER:
+        classname: org.genepattern.server.executor.drm.JobExecutor
+        configuration.properties:
+        default.properties:
+            # list of custom resource_names
+            job.ge.resource_names: [ 
+                # -l os=centos5|rhel6
+                "os", 
+                # -l arch=lx-amd64
+                "arch",
+                # test cases ...
+                "test_not_set", 
+                "test_null",
+                "test_empty",
+                "test_no_value",
+                "test_wildcard",
+                "test_list"
+            ]
+            # test-cases ...
+            # test-case: set default '-l os=centos5"
+            job.ge.resource.os: "centos5"
+            # test-case: set to null means don't append to command line
+            job.ge.resource.test_null: null
+            # test-case: set to empty String means don't append to command line
+            job.ge.resource.test_empty: ""
+            # test-case: set to no value means don't append to command line
+            job.ge.resource.test_no_value:
+            # test-case: wildcard passed as string literal
+            job.ge.resource.test_wildcard: "prefix.*"
+            # test-case: set to a list of values, join by '|' which means select A or B or C
+            job.ge.resource.test_list: [ "A", "B", "C" ]
