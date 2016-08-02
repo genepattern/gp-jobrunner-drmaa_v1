@@ -61,6 +61,19 @@ executors:
             #   qconf -sp openmpi
             #
             job.ge.pe_type: smp
+            
+            ##
+            # [optional] set complex attributes of the form:
+            #     -l {resource_name}={value}
+            # for example,
+            #     -l os=centos5
+            # step 1: add {name} to the 'job.ge.resources_names' list.
+            # step 2: set job.ge.resource.{name}: {value}
+            # Example,
+            # job.ge.resource_names: [
+            #     "os"
+            # ]
+            # job.ge.resource.os: "centos5" 
 
 module.properties:
     TestStep:
