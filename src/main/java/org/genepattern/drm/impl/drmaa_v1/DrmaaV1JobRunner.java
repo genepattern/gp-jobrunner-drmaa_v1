@@ -71,6 +71,17 @@ public class DrmaaV1JobRunner implements JobRunner {
      * 
      */
     public static final String PROP_DRMAA_LIBRARY_PATH="DRMAA_LIBRARY_PATH";
+    
+    /**
+     * To set complex attributes of the form, <pre>-l {resource_name}={resource_value}</pre>,
+     * first add the {resource_name} to the list of 'job.ge.resource_names', then set
+     * 'job.ge.{resource_name}: {resource_value}. For example:
+     * <pre>
+       job.ge.resource_names: [ "os" ]
+       job.ge.resource.os: "centos5"
+     * </pre>
+     */
+    public static final String PROP_RESOURCE_NAMES="job.ge.resource_names";
  
     /**
      * lookup table for selecting an entry from the GenePattern DrmJobState enum 
@@ -405,6 +416,9 @@ public class DrmaaV1JobRunner implements JobRunner {
         // optionally set the '-pe' flag, for parallel jobs
         rval.addAll(getPeFlags(jobSubmission));
         
+        // optionally set complex attributes, -l {resource}={value}
+        rval.addAll(getCustomResourceFlags(jobSubmission));
+        
         // optionally add any extra args
         final List<String> extraArgs=jobSubmission.getExtraArgs();
         if (extraArgs != null) { 
@@ -461,6 +475,29 @@ public class DrmaaV1JobRunner implements JobRunner {
         return Arrays.asList("-pe", peType, ""+numCores);
     }
     
+    protected List<String> getCustomResourceFlags(final DrmJobSubmission jobSubmission) {
+        List<String> rval=new ArrayList<String>();
+        Value resourceNames=jobSubmission.getValue(PROP_RESOURCE_NAMES);
+        if (resourceNames != null) {
+            for(final String resourceName : resourceNames.getValues()) {
+                rval.addAll( getCustomResourceArgs( resourceName, jobSubmission ) );
+            }
+        }
+        return rval;
+    }
+    
+    protected List<String> getCustomResourceArgs(final String resourceName, DrmJobSubmission jobSubmission) {
+        final Value resourceValues=jobSubmission.getValue("job.ge.resource."+resourceName);
+        if (resourceValues==null) {
+            return Collections.emptyList();
+        }
+        final String resourceValueStr=Joiner.on("|").skipNulls().join(resourceValues.getValues());
+        if (Strings.isNullOrEmpty(resourceValueStr)) {
+            return Collections.emptyList();
+        }
+        return Arrays.asList( "-l", resourceName+"="+resourceValueStr);
+    }
+
     protected String initFilepath(final File workingDir, final File ioFile, final String defaultValue) {
         String filepath=defaultValue;
         if (ioFile != null) {
