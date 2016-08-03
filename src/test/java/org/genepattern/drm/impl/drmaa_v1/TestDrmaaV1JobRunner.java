@@ -96,7 +96,7 @@ public class TestDrmaaV1JobRunner {
         assertTrue("validateCmdLine should not throw an exception", true);
     }
     
-    protected void assertArgWithFlag(final List<String> args, final String flag, final String... expectedArgs) {
+    protected static void assertArgWithFlag(final List<String> args, final String flag, final String... expectedArgs) {
         int idx0=args.indexOf(flag);
         assertTrue("missing expected flag='"+flag+"' in args="+args, idx0>=0);
         int j=idx0;
