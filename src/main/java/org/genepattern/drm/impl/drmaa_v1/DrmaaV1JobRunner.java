@@ -1,6 +1,7 @@
 package org.genepattern.drm.impl.drmaa_v1;
 
 import java.io.File;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -21,6 +22,8 @@ import org.genepattern.drm.DrmJobStatus;
 import org.genepattern.drm.DrmJobSubmission;
 import org.genepattern.drm.JobRunner;
 import org.genepattern.drm.Memory;
+import org.genepattern.server.config.GpConfig;
+import org.genepattern.server.config.GpContext;
 import org.genepattern.server.config.Value;
 import org.genepattern.server.executor.CommandExecutorException;
 import org.ggf.drmaa.AuthorizationException;
@@ -97,6 +100,23 @@ public class DrmaaV1JobRunner implements JobRunner {
         map.put(Session.DONE, DrmJobState.DONE);
         map.put(Session.FAILED, DrmJobState.FAILED);        
         jobStateMap = Collections.unmodifiableMap(map);
+    }
+
+    protected static final BigDecimal getGPBigDecimalProperty(final GpConfig gpConfig, final GpContext gpContext, final String key) {
+        if (gpConfig==null) {
+            return null;
+        }
+        final String val=gpConfig.getGPProperty(gpContext, key);
+        if (Strings.isNullOrEmpty(val)) {
+            return null;
+        }
+        try {
+            return new BigDecimal(val);
+        }
+        catch (NumberFormatException e) {
+            log.error("Error parsing numerical value for "+key+"='"+val+"'", e);
+            return null;
+        }
     }
 
     public void start() {
@@ -295,6 +315,14 @@ public class DrmaaV1JobRunner implements JobRunner {
             final String stdin=initFilepath(jobSubmission.getWorkingDir(), jobSubmission.getStdinFile(), "stdin.txt");
             rval.add("-i");
             rval.add(stdin);
+        }
+        
+        // optionally set the priority flag
+        final BigDecimal priority = getGPBigDecimalProperty(jobSubmission.getGpConfig(), jobSubmission.getJobContext(), "job.priority");
+        if (priority != null) {
+            // -p {job.priority}
+            rval.add("-p");
+            rval.add(""+priority);
         }
         
         // optionally set the memory flag

@@ -30,6 +30,8 @@ executors:
             job.queue: short
             job.memory: 2 Gb
             job.project: genepattern
+            # default priority is 0; set to a value < 0 for lower priority jobs
+            # job.priority: 0
 
             ## 
             # UGER specific flags
@@ -81,11 +83,15 @@ module.properties:
         job.ge.clear: "true"
         # per-module, custom job.queue
         job.queue: "long"
+        # per-module, custom priority
+        job.priority: -10
 
 group.properties:
     administrators:
         job.ge.clear: true
+        job.priority: -20
 
 user.properties:
     custom_user:
         job.ge.clear: true
+        job.priority: -30

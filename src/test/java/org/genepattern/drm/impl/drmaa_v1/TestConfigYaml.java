@@ -3,6 +3,7 @@ package org.genepattern.drm.impl.drmaa_v1;
 import static org.junit.Assert.assertEquals;
 
 import java.io.File;
+import java.math.BigDecimal;
 import java.net.URL;
 
 import org.genepattern.server.config.GpConfig;
@@ -91,12 +92,30 @@ public class TestConfigYaml {
     }
     
     @Test
+    public void jobPriority_default() throws Throwable { 
+        assertEquals("job.priority", 
+                null, 
+                DrmaaV1JobRunner.getGPBigDecimalProperty(configExample, jobContext_default, "job.priority"));
+    }
+
+    @Test
     public void jobGeClear_default() throws Throwable { 
         assertEquals(DrmaaV1JobRunner.PROP_CLEAR, 
                 false, 
                 configExample.getGPBooleanProperty(jobContext_default, DrmaaV1JobRunner.PROP_CLEAR));
     }
     
+    @Test
+    public void jobPriority_perModule() throws Throwable { 
+        final GpContext jobContext_custom=new GpContext.Builder()
+            .userId("test_user")
+            .taskInfo(testStep)
+        .build();
+        assertEquals("job.priority", 
+                new BigDecimal("-10"), 
+                DrmaaV1JobRunner.getGPBigDecimalProperty(configExample, jobContext_custom, "job.priority"));
+    }
+
     @Test 
     public void jobGeClear_perModule() throws Throwable {
         final GpContext jobContext_custom=new GpContext.Builder()
@@ -108,6 +127,16 @@ public class TestConfigYaml {
                 configExample.getGPBooleanProperty(jobContext_custom, DrmaaV1JobRunner.PROP_CLEAR));
     }
     
+    @Test 
+    public void jobPriority_perUser() throws Throwable {
+        final GpContext jobContext_custom=new GpContext.Builder()
+            .userId("custom_user")
+        .build();
+        assertEquals("job.priority", 
+                new BigDecimal("-30"), 
+                DrmaaV1JobRunner.getGPBigDecimalProperty(configExample, jobContext_custom, "job.priority"));
+    }
+
     @Test 
     public void jobGeClear_perUser() throws Throwable {
         final GpContext jobContext_custom=new GpContext.Builder()
